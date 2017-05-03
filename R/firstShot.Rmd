@@ -1,0 +1,22 @@
+---
+title: "First step of workflow: zinbwave"
+author: "Fanny Perraudeau"
+date: "05/3/2017"
+output: 
+  html_document: 
+  fig_height: 10
+fig_width: 10
+toc: yes
+code_folding: hide
+toc_float: yes
+---
+```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
+knitr::opts_chunk$set(fig.align="center", cache=TRUE, error=FALSE, message=FALSE, warning=TRUE, fig.width=6, fig.height=6)
+library(zinbwave)
+```
+
+# Data in
+```{r}
+
+
+```
