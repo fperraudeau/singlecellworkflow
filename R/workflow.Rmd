@@ -1,0 +1,330 @@
+---
+title: "Worflow"
+author: "Fanny Perraudeau"
+date: "05/25/2017"
+output: 
+  html_document: 
+    fig_height: 7
+    fig_width: 7
+    toc: yes
+    code_folding: hide
+    toc_float: yes
+---
+
+```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
+knitr::opts_chunk$set(fig.align="center", cache=TRUE, error=FALSE, message=FALSE, warning=TRUE)
+library(SummarizedExperiment)
+library(scRNAseq)
+library(zinbwave)
+library(ggplot2)
+library(gplots)
+library(magrittr)
+library(matrixStats)
+library(Rtsne)
+library(scone)
+library(RColorBrewer)
+library(digest)
+library(scone)
+library(slingshot)
+library(rARPACK)
+library(clusterExperiment)
+set.seed(20)
+```
+
+
+```{r}
+runZinb = F
+runClus = F
+NCORES = 2
+```
+
+# TL;DR
+
+This document is a temptative of workflow with the following steps  
+
+- Fit zinbwave with K = 50, X including the batches,   
+- Get W which should capture the biology,  
+- Use clusterExperiment on W,   
+- Get the cluster labels,   
+- Use slingshot on W from zinbwave and with cluster labels from clusterExperiment,  
+- Get lineages,  
+- Fit again zinbwave but with X including batches and lineages from slingshot,  
+- Get DE genes between lineages.  
+
+Along the worflow, use deviance residuals as adjusted "counts".
+
+
+# Unnormalized data
+I am still using the data Davide gave me a while ago. And I think now it is not the same data Davide is using in its most recent vignette (that is zinb_clustering_over_k.Rmd). It should not be very important but it would be nice if we have a common dataset we can work on.
+
+
+```{r datain}
+load("../data/Expt4c2b_filtdata.Rda")
+load("../data/E4c2b_slingshot_wsforkelly.RData")
+```
+
+
+Here we only look at the 1000 most variable genes.
+```{r filtering}
+names(batch) <- colnames(counts)
+
+counts <- counts[,names(clus.labels)]
+batch <- droplevels(batch[names(clus.labels)])
+qc <- qc[names(clus.labels),]
+
+vars <- rowVars(log1p(counts))
+names(vars) <- rownames(counts)
+vars <- sort(vars, decreasing = TRUE)
+core <- counts[names(vars)[1:1000],]
+```
+
+
+We have `r ncol(counts)` cells.
+```{r lookatdata}
+dim(core)
+core[1:3, 1:3]
+```
+
+Cells have been processed in `r length(unique(batch))` different batches
+```{r tabbatch}
+table(batch)
+```
+
+Cells have been clustered into `r length(unique(clus.labels))` different clusters
+```{r tabclus}
+table(clus.labels)
+```
+
+Batches are kind of confounded with the biology
+```{r}
+table(data.frame(batch = as.vector(batch),
+                 cluster = clus.labels))
+
+```
+
+
+```{r}
+compute.naive.residuals <- function(Y, zinb){
+  mu_hat = t(getMu(zinb)) 
+  pi_hat = t(getPi(zinb)) 
+  Y_hat = (1 - pi_hat) * mu_hat
+  Y - Y_hat 
+}
+
+compute.pearson.residuals <- function(Y, zinb){
+  num = compute.naive.residuals(Y, zinb)
+  mu = t(getMu(zinb)) 
+  pi = t(getPi(zinb)) 
+  phi = matrix(rep(getPhi(zinb), ncol(Y)), ncol = ncol(Y))
+  var_hat = (1 - pi) * mu * (1 + mu * (phi + pi))
+  num / sqrt(var_hat)  
+}
+
+compute.zinb.loglik <- function(Y, zinb){
+  mu = t(getMu(zinb)) 
+  theta = getTheta(zinb)
+  theta_mat = matrix(rep(theta, ncol(Y), ncol = ncol(Y)))
+  pi = t(getPi(zinb))
+  log( pi * (Y == 0) + (1 - pi) * dnbinom(Y, size = theta, mu = mu) )
+}
+
+compute.deviance.residuals <- function(Y, zinb){
+  mu_hat = t(getMu(zinb)) 
+  pi_hat = t(getPi(zinb)) 
+  Y_hat = (1 - pi_hat) * mu_hat
+  ll = compute.zinb.loglik(Y, zinb)
+  sign = 1*(Y - Y_hat > 0)
+  sign[sign == 0] = -1
+  sign * sqrt(-2 * ll)
+}
+```
+
+# 0. Residuals for visualization
+## Fit zinbwave X intercept, no batch
+Let's run zinbwave with K = 0 and X batches.
+```{r}
+fn = '../data/zinb_k0_batch.rda'
+if (runZinb){
+  mod = model.matrix( ~ batch)
+  print(system.time(zinb0 <- zinbFit(core, K = 0, X = mod, ncores = NCORES)))
+  save(zinb0, file = fn)
+}else{
+  load(fn)
+}
+```
+
+We use deviance residuals for visualization. Let's check that deviance residuals look ok.
+```{r}
+res = compute.deviance.residuals(core, zinb0)
+res[1:3,1:3]
+```
+
+PCA on the residuals where color are for batches on the left and previously found clusters on the right.
+```{r}
+pca = prcomp(t(res))
+par(mfrow = c(1,2))
+plot(pca$x, col = batch, pch = 19,
+     main="PCA of residuals\ncolor=batch")
+plot(pca$x, col = clus.labels, pch = 19,
+     main = "PCA of residuals\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+Boxplot of the residuals for each cell.
+```{r}
+res_order = res[, order(as.numeric(batch))]
+col_order = as.numeric(batch)[order(as.numeric(batch))]
+boxplot(res_order, main='Boxplot of residuals\ncolor=batch', col = col_order,         staplewex = 0, outline = 0, border = col_order, xaxt = 'n')
+```
+
+Deviance residuals seem ok.
+
+# 1. zinbwave with raw counts
+
+Let's run zinbwave with K = 50 and X including batches.
+```{r}
+fn = '../data/zinb_k50_batch.rda'
+if (runZinb){
+  mod = model.matrix( ~ batch)
+  print(system.time(zinb50 <- zinbFit(core, ncores = NCORES, K = 50,
+                                      X = mod)))
+  save(zinb50, file = fn)
+}else{
+  load(fn)
+}
+```
+
+
+# 2. clusterExperiment with W
+
+I use the code of Davide from zinb_clutering_over_k.Rmd
+```{r consensus_50}
+## matching the parameters used by Russell
+W = zinb50@W
+fn = '../data/clustExp_W_k50.rda'
+if(runClus) {
+  cl_res <- clusterMany(t(W), ks = 4:15, alphas = c(0.1), betas = 0.8,
+                        clusterFunction = "hierarchical01", minSizes=1,
+                        sequential = TRUE, subsample = TRUE, ncores = 7,
+                        subsampleArgs = list(resamp.num=100,
+                                             clusterFunction="kmeans",
+                                             clusterArgs=list(nstart=10)),
+                        seqArgs = list(k.min=3, top.can=5), verbose=TRUE)
+  save(cl_res, file = fn)
+} else {
+  load(fn)
+}
+```
+
+```{r combine_50}
+combined <- combineMany(cl_res, proportion = 0.7)
+plotClusters(combined, colPalette = c(bigPalette, rainbow(100)))
+plotCoClustering(combined)
+table(primaryClusterNamed(combined))
+sum(primaryCluster(combined) == -1)
+```
+
+```{r new_clusters}
+plot(getW(zinb50), col=clus.labels, main = 'color = previous')
+plot(getW(zinb50), col=as.factor(primaryCluster(combined)), main = 'color = new')
+table(data.frame(previous = clus.labels, new = primaryCluster(combined)))
+```
+
+```{r merged}
+combined <- makeDendrogram(combined)
+plotDendrogram(combined)
+merged <- mergeClusters(combined, mergeMethod = "locfdr", cutoff = 0.01)
+```
+
+Just to see what it looks like, let's look at the heatmap on the W (number of cells x K=50). Now, we would like to plot a heatmap using the residuals (number of cells x number of genes). When I call plotHeatmap using argument visualizeData = residuals_matrix, it does not work and says that if give separate visualizeData, must be of same dimensions as assay(data).
+```{r heatmap}
+plotHeatmap(merged, clusterSamplesData="dendrogramValue", breaks = .99)
+```
+
+So, let's look at a heatmap on deviance residuals using heatmap.2 from gplots package with all the 1000 most variable genes.
+```{r}
+palDF = merged@clusterLegend[[1]]
+pal = palDF[, 'color']
+names(pal) = palDF[, 'name']
+
+heatmap.2(res, Colv = merged@dendro_samples,
+          scale = 'none', trace = 'none', 
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          ColSideColors = pal[primaryClusterNamed(merged)],
+          labCol = '', main = 'Deviance Residuals, 1000 most variable genes')
+legend("bottom", legend = names(pal), fill = pal, title = 'Clusters',
+       horiz = T, cex = 0.5)
+```
+
+
+
+# 3. slingshot with W and cluster labels
+I used the unsupervised mode on W got from fitting zinbwave with batches in X and K = 4.
+
+
+```{r slingshot}
+fn = '../data/zinb_k4_batch.rda'
+if (runZinb){
+  cl_labs = primaryCluster(merged)
+  batch_red = as.vector(batch)
+  batch_red = batch_red[cl_labs != -1]
+  cl_labs = cl_labs[cl_labs != -1]
+  mod = model.matrix( ~ batch_red)
+  zinb4 = zinbFit(core[,primaryCluster(merged) != -1],
+                  X = mod, K = 4, ncores = NCORES)
+  save(zinb4, file = fn)
+}else{
+  cl_labs = primaryCluster(merged)
+  batch_red = as.vector(batch)
+  batch_red = batch_red[cl_labs != -1]
+  cl_labs = cl_labs[cl_labs != -1]
+  mod = model.matrix( ~ batch_red)
+  load(fn)
+}
+```
+
+```{r}
+X <- zinb4@W
+
+lineages <- get_lineages(X, clus.labels = cl_labs, start.clus = 1)
+curves <- get_curves(X, clus.labels = cl_labs, lineages = lineages)
+plot_curves(X, cl_labs, curves, col.clus = unique(cl_labs))
+
+print(lineages$lineage1)
+print(lineages$lineage2)
+print(lineages$lineage3)
+print(lineages$lineage4)
+```
+
+# 4. zinbwave with lineages
+
+Which clusters would it make sense to test one versus the other? Would it be interesting to do two by two comparison between clusters next to each other in the different lineages?
+
+
+# 5. DE genes with betas
+
+DE analysis using ZINB-Wave has not been implemented yet and we are still thinking about it. Would it make sense just to test the betas between clusters making the assumption that the genes are independent? Below is just a visualization of what we could have at the end of the worflow: a heatmap of the deviance residuals for DE genes between clusters.
+
+
+```{r}
+de = read.csv('../data/oe_markers.txt', stringsAsFactors = F, header = F)
+de = de$V1
+
+breaks = setBreaks(res[rownames(res) %in% de, ], 0.99)
+heatmap.2(res[rownames(res) %in% de, ], breaks = breaks,
+          Colv = merged@dendro_samples,
+          scale = 'none', trace = 'none', 
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          ColSideColors = pal[primaryClusterNamed(merged)],
+          labCol = '', main = 'Deviance Residuals, DE genes (Russell)')
+legend("bottom", legend = names(pal), fill = pal, title = 'Clusters',
+       horiz = T, cex = 0.5)
+```
+
+
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
