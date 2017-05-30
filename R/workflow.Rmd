@@ -33,8 +33,8 @@ set.seed(20)
 
 
 ```{r}
-runZinb = F
-runClus = F
+runZinb = FALSE
+runClus = FALSE
 NCORES = 2
 ```
 
@@ -80,26 +80,29 @@ core <- counts[names(vars)[1:1000],]
 
 
 We have `r ncol(counts)` cells.
+
 ```{r lookatdata}
 dim(core)
 core[1:3, 1:3]
 ```
 
 Cells have been processed in `r length(unique(batch))` different batches
+
 ```{r tabbatch}
 table(batch)
 ```
 
 Cells have been clustered into `r length(unique(clus.labels))` different clusters
+
 ```{r tabclus}
 table(clus.labels)
 ```
 
 Batches are kind of confounded with the biology
+
 ```{r}
 table(data.frame(batch = as.vector(batch),
                  cluster = clus.labels))
-
 ```
 
 
@@ -197,7 +200,46 @@ if (runZinb){
 
 # 2. clusterExperiment with W
 
+EAP: Fanny, we should really be using the RSEC function for all the steps of the clustering. I've put in the code, but I set `eval=FALSE` because I don't have the data to test it. I also am not sure that we want to set the options for `subsampleArgs` and `seqArgs` since those are suppose to be sort of esoteric concerns...
+
+
+```{r rsec_50, eval=FALSE}
+fn = '../data/clustExp_W_k50.rda'
+if(runClus) {
+ceObj <- RSEC(t(W), k0s = 4:15, alphas = c(0.1), betas = 0.8,
+                      clusterFunction = "hierarchical01", minSizes=1,
+                      sequential = TRUE, subsample = TRUE, ncores = NCORES,
+					  combineProportion = 0.7,mergeMethod = "locfdr", mergeCutoff = 0.01
+                      subsampleArgs = list(resamp.num=100,
+                                           clusterFunction="kmeans",
+                                           clusterArgs=list(nstart=10)),
+                      seqArgs = list(k.min=3, top.can=5), verbose=TRUE)
+save(ceObj, file = fn)
+}
+else{
+	load(fn)
+}
+```
+
+```{r examineCombineMany, eval=FALSE}
+plotClusters(ceObj, colPalette = c(bigPalette, rainbow(100)))
+plotCoClustering(ceObj)
+table(primaryClusterNamed(ceObj))
+sum(primaryCluster(ceObj) == -1)
+```
+
+```{r examineMergeClusters, eval=FALSE}
+#re-does merging simpling to make plot 
+mergeClusters(ceObj, mergeMethod = "locfdr", plot="mergeMethod",cutoff = 0.01)
+```
+
+```{r heatmap,eval=FALSE}
+plotHeatmap(ceObj, clusterSamplesData="dendrogramValue", breaks = .99)
+```
+
+## Original ClusterExperiment code (in Steps)
 I use the code of Davide from zinb_clutering_over_k.Rmd
+
 ```{r consensus_50}
 ## matching the parameters used by Russell
 W = zinb50@W
@@ -237,6 +279,7 @@ merged <- mergeClusters(combined, mergeMethod = "locfdr", cutoff = 0.01)
 ```
 
 Just to see what it looks like, let's look at the heatmap on the W (number of cells x K=50). Now, we would like to plot a heatmap using the residuals (number of cells x number of genes). When I call plotHeatmap using argument visualizeData = residuals_matrix, it does not work and says that if give separate visualizeData, must be of same dimensions as assay(data).
+
 ```{r heatmap}
 plotHeatmap(merged, clusterSamplesData="dendrogramValue", breaks = .99)
 ```
