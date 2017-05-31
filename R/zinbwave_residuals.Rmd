@@ -1,5 +1,5 @@
 ---
-title: "Residuals in zinbwave"
+title: "Residuals in zinbwave, 1000 most variable genes"
 author: "Fanny Perraudeau, Davide Risso"
 date: "05/25/2017"
 output: 
@@ -13,19 +13,12 @@ output:
 
 ```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
 knitr::opts_chunk$set(fig.align="center", cache=TRUE, error=FALSE, message=FALSE, warning=TRUE)
-library(SummarizedExperiment)
-library(scRNAseq)
 library(zinbwave)
-library(ggplot2)
-library(magrittr)
 library(matrixStats)
-library(Rtsne)
-library(scone)
-library(RColorBrewer)
-library(digest)
-library(scone)
-library(rARPACK)
+library(gplots) #heatmap.2()
+library(clusterExperiment) #setBreaks()
 set.seed(20)
+NCORES = 8
 ```
 
 
@@ -41,6 +34,8 @@ I am still using the data Davide gave me a while ago. And I think now it is not 
 ```{r datain}
 load("../data/Expt4c2b_filtdata.Rda")
 load("../data/E4c2b_slingshot_wsforkelly.RData")
+de = read.csv('../data/oe_markers.txt', stringsAsFactors = F, header = F)
+de = de$V1
 ```
 
 
@@ -86,8 +81,6 @@ table(data.frame(batch = as.vector(batch),
 ```{r}
 plotBoxplot <- function(y, main = '', col, log = F){
   if (log) y = log2(y + 1)
-  #median = apply(y, 1, median)
-  #rle = apply(y, 2, function(x) x - median)
   boxplot(y, main=main, col=col, staplewex=0, outline=0, 
           border=col, xaxt='n')
   abline(h=0)
@@ -133,7 +126,7 @@ compute.deviance.residuals <- function(Y, zinb){
   pi_hat = t(getPi(zinb)) 
   Y_hat = (1 - pi_hat) * mu_hat
   ll = compute.zinb.loglik(Y, zinb)
-  sign = as.numeric(Y - Y_hat > 0)
+  sign = 1*(Y - Y_hat > 0)
   sign[sign == 0] = -1
   sign * sqrt(-2 * ll)
 }
@@ -143,7 +136,7 @@ compute.deviance.residuals <- function(Y, zinb){
 # X intercept, no batch
 Let's run zinbwave with K = 0 and X with an intercept only (no batch).
 ```{r}
-print(system.time(zinb <- zinbFit(core, ncores = 3, K = 0)))
+print(system.time(zinb <- zinbFit(core, ncores = NCORES, K = 0)))
 ```
 
 
@@ -164,6 +157,13 @@ plot(pca$x, col = clus.labels, pch = 19,
 par(mfrow = c(1,1))
 ```
 
+```{r}
+de_1000 = de[de %in% rownames(Rn)]
+length(de_1000)
+head(de_1000)
+```
+
+
 Each boxplot is for a cell. Colors correspond to the batches. When colors are the same but boxplots are not next to each others it corresponds to different batches. We would expect that the residuals look similar for the different batches.
 ```{r}
 Rn_order = Rn[, order(as.numeric(batch))]
@@ -172,6 +172,14 @@ plotBoxplot(Rn_order, main = 'Boxplot of residuals\ncolor=batch',
             col = col_order)
 ```
 
+```{r}
+breaks = setBreaks(Rn[de_1000, ], breaks = 0.99)
+heatmap.2(Rn[de_1000, ], breaks = breaks,
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Naive Residuals')
+```
 
 ## Naive residuals of log(Y+1)
 ```{r}
@@ -188,6 +196,8 @@ plot(pca$x, col = clus.labels, pch = 19,
      main = "PCA of residuals\ncolor=cluster")
 par(mfrow = c(1,1))
 ```
+
+
 ```{r}
 Rn_order = Rn[, order(as.numeric(batch))]
 col_order = as.numeric(batch)[order(as.numeric(batch))]
@@ -195,6 +205,13 @@ plotBoxplot(Rn_order, main = 'Boxplot of residuals\ncolor=batch',
             col = col_order)
 ```
 
+```{r}
+heatmap.2(Rn[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Naive Residuals')
+```
 
 ## Pearson residuals
 ```{r}
@@ -219,7 +236,13 @@ plotBoxplot(Rp_order, main = 'Boxplot of residuals\ncolor=batch',
             col = col_order)
 ```
 
-
+```{r}
+heatmap.2(Rp[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Pearson residuals')
+```
 
 ## Deviance residuals
 ```{r}
@@ -244,13 +267,19 @@ plotBoxplot(Rd_order, main = 'Boxplot of residuals\ncolor=batch',
             col = col_order)
 ```
 
-
+```{r}
+heatmap.2(Rd[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Deviance residuals')
+```
 
 # X batches
 Let's run zinbwave with K = 0 and X with an intercept only (no batch).
 ```{r}
 mod = model.matrix( ~ batch)
-print(system.time(zinb_batch <- zinbFit(core, ncores = 3, K = 0,
+print(system.time(zinb_batch <- zinbFit(core, ncores = NCORES, K = 0,
                                   X = mod)))
 ```
 
@@ -260,6 +289,7 @@ print(system.time(zinb_batch <- zinbFit(core, ncores = 3, K = 0,
 Rn = compute.naive.residuals(core, zinb_batch)
 Rn[1:3,1:3]
 ```
+
 ```{r}
 pca = prcomp(t(Rn))
 par(mfrow = c(1,2))
@@ -275,6 +305,15 @@ Rn_order = Rn[, order(as.numeric(batch))]
 col_order = as.numeric(batch)[order(as.numeric(batch))]
 plotBoxplot(Rn_order, main = 'Boxplot of residuals\ncolor=batch',
             col = col_order)
+```
+
+```{r}
+breaks = setBreaks(Rn[de_1000, ], breaks = 0.99)
+heatmap.2(Rn[de_1000, ], breaks = breaks,
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Naive residuals')
 ```
 
 ## Naive residuals of log(Y+1)
@@ -293,11 +332,20 @@ plot(pca$x, col = clus.labels, pch = 19,
 par(mfrow = c(1,1))
 ```
 
+
 ```{r}
 Rn_order = Rn[, order(as.numeric(batch))]
 col_order = as.numeric(batch)[order(as.numeric(batch))]
 plotBoxplot(Rn_order, main = 'Boxplot of residuals\ncolor=batch',
             col = col_order)
+```
+
+```{r}
+heatmap.2(Rn[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Naive residuals')
 ```
 
 ## Pearson residuals
@@ -323,6 +371,13 @@ plotBoxplot(Rp_order, main = 'Boxplot of residuals\ncolor=batch',
             col = col_order)
 ```
 
+```{r}
+heatmap.2(Rp[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Pearson residuals')
+```
 
 ## Deviance residuals
 ```{r}
@@ -340,12 +395,19 @@ plot(pca$x, col = clus.labels, pch = 19,
 par(mfrow = c(1,1))
 ```
 
-
 ```{r}
 Rd_order = Rd[, order(as.numeric(batch))]
 col_order = as.numeric(batch)[order(as.numeric(batch))]
 plotBoxplot(Rd_order, main = 'Boxplot of residuals\ncolor=batch',
             col = col_order)
+```
+
+```{r}
+heatmap.2(Rd[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Deviance residuals')
 ```
 
 # Conclusions 
