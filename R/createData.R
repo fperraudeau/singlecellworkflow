@@ -20,8 +20,10 @@ qc <- cbind(qc, CreER = cre, ERCC_reads = colSums(ercc))
 batch <- droplevels(pData(Cufflinks_eSet)$MD_c1_run_id)
 bio <- droplevels(pData(Cufflinks_eSet)$MD_expt_condition)
 
+clusterLabels<-read.table("../data/oeHBCdiff_clusterLabels.txt",sep="\t",stringsAsFactors=FALSE)
+m<-match(colnames(E) ,clusterLabels[,1])
 
-metaData<-data.frame("Experiment"=bio,"Batch"=batch,qc)
+metaData<-data.frame("Experiment"=bio,"Batch"=batch,"clusterLabels"=clusterLabels[m,2],qc)
 
 # filtering to top 1000 most variable:
 library(matrixStats)

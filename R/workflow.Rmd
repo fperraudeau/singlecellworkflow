@@ -33,8 +33,8 @@ set.seed(20)
 
 
 ```{r}
-runZinb = FALSE
-runClus = FALSE
+runZinb = TRUE
+runClus = TRUE
 NCORES = 2
 ```
 
@@ -53,33 +53,36 @@ This document is a temptative of workflow with the following steps
 
 Along the worflow, use deviance residuals as adjusted "counts".
 
+EAP: small request. Can everyone put a line between the beginning of a r chunk and text? It makes it nicely formated for my text editor. 
 
 # Unnormalized data
 I am still using the data Davide gave me a while ago. And I think now it is not the same data Davide is using in its most recent vignette (that is zinb_clustering_over_k.Rmd). It should not be very important but it would be nice if we have a common dataset we can work on.
 
+EAP: I have updated the code to pull from a dataset on the repos that is created with the `createData.R` file. For now, I am filtering to the top 1000 most variable genes there, though we might want to add that to the code for the article. This will be slightly different data from Russell's, which didn't use all of the samples. We can adjust that decision later, or just compare the samples that are the same. (Russell's clusterLabels are in the meta data)
 
 ```{r datain}
-load("../data/Expt4c2b_filtdata.Rda")
-load("../data/E4c2b_slingshot_wsforkelly.RData")
+#counts<-read.table("../data/oeCufflinkCountData.txt",sep="\t",header=TRUE)
+core<-read.table("../data/oeCufflinkCountData_1000Var.txt",sep="\t",header=TRUE)
+metadata<-read.table("../data/oeMetadata.txt",sep="\t",header=TRUE)
+# load("../data/Expt4c2b_filtdata.Rda")
+# load("../data/E4c2b_slingshot_wsforkelly.RData")
 ```
 
 
-Here we only look at the 1000 most variable genes.
+Here we only look at the 1000 most variable genes. EAP: see note above, I've commented out the filtering and added it to the `createData.R` for now. 
+
 ```{r filtering}
-names(batch) <- colnames(counts)
-
-counts <- counts[,names(clus.labels)]
-batch <- droplevels(batch[names(clus.labels)])
-qc <- qc[names(clus.labels),]
-
-vars <- rowVars(log1p(counts))
-names(vars) <- rownames(counts)
-vars <- sort(vars, decreasing = TRUE)
-core <- counts[names(vars)[1:1000],]
+batch <- metadata$Batch
+qc <- metadata[,!names(metadata)%in% c("Batch","Experiment","clusterLabels")]
+clus.labels<-metadata[,"clusterLabels"]
+# vars <- rowVars(log1p(counts))
+# names(vars) <- rownames(counts)
+# vars <- sort(vars, decreasing = TRUE)
+# core <- counts[names(vars)[1:1000],]
 ```
 
 
-We have `r ncol(counts)` cells.
+We have `r ncol(core)` cells.
 
 ```{r lookatdata}
 dim(core)
@@ -105,6 +108,8 @@ table(data.frame(batch = as.vector(batch),
                  cluster = clus.labels))
 ```
 
+
+EAP: if we are going to ultimately use these functions, it would be good to add them to the package for zinbwave.
 
 ```{r}
 compute.naive.residuals <- function(Y, zinb){
@@ -145,6 +150,7 @@ compute.deviance.residuals <- function(Y, zinb){
 # 0. Residuals for visualization
 ## Fit zinbwave X intercept, no batch
 Let's run zinbwave with K = 0 and X batches.
+
 ```{r}
 fn = '../data/zinb_k0_batch.rda'
 if (runZinb){
@@ -157,12 +163,14 @@ if (runZinb){
 ```
 
 We use deviance residuals for visualization. Let's check that deviance residuals look ok.
+
 ```{r}
 res = compute.deviance.residuals(core, zinb0)
 res[1:3,1:3]
 ```
 
 PCA on the residuals where color are for batches on the left and previously found clusters on the right.
+
 ```{r}
 pca = prcomp(t(res))
 par(mfrow = c(1,2))
@@ -174,6 +182,7 @@ par(mfrow = c(1,1))
 ```
 
 Boxplot of the residuals for each cell.
+
 ```{r}
 res_order = res[, order(as.numeric(batch))]
 col_order = as.numeric(batch)[order(as.numeric(batch))]
@@ -185,6 +194,7 @@ Deviance residuals seem ok.
 # 1. zinbwave with raw counts
 
 Let's run zinbwave with K = 50 and X including batches.
+
 ```{r}
 fn = '../data/zinb_k50_batch.rda'
 if (runZinb){
@@ -203,7 +213,7 @@ if (runZinb){
 EAP: Fanny, we should really be using the RSEC function for all the steps of the clustering. I've put in the code, but I set `eval=FALSE` because I don't have the data to test it. I also am not sure that we want to set the options for `subsampleArgs` and `seqArgs` since those are suppose to be sort of esoteric concerns...
 
 
-```{r rsec_50, eval=FALSE}
+```{r rsec_50}
 fn = '../data/clustExp_W_k50.rda'
 if(runClus) {
 ceObj <- RSEC(t(W), k0s = 4:15, alphas = c(0.1), betas = 0.8,
@@ -221,26 +231,32 @@ else{
 }
 ```
 
-```{r examineCombineMany, eval=FALSE}
+```{r examineCombineMany}
 plotClusters(ceObj, colPalette = c(bigPalette, rainbow(100)))
 plotCoClustering(ceObj)
 table(primaryClusterNamed(ceObj))
 sum(primaryCluster(ceObj) == -1)
 ```
 
-```{r examineMergeClusters, eval=FALSE}
+```{r examineMergeClusters}
 #re-does merging simpling to make plot 
 if(packageVersion("clusterExperiment")>='1.3.0.9001') mergeClusters(ceObj, mergeMethod = "locfdr", plotInfo="mergeMethod",cutoff = 0.01)
 ```
 
-```{r heatmap,eval=FALSE}
+```{r heatmap }
 if(packageVersion("clusterExperiment")>='1.3.0.9002') plotHeatmap(ceObj, clusterSamplesData="dendrogramValue", breaks = .99)
+```
+
+```{r compareClusters}
+plot(getW(zinb50), col=clus.labels, main = 'color = previous')
+plot(getW(zinb50), col=as.factor(primaryCluster(ceObj)), main = 'color = new')
+table(data.frame(previous = clus.labels, new = primaryCluster(ceObj)))
 ```
 
 ## Original ClusterExperiment code (in Steps)
 I use the code of Davide from zinb_clutering_over_k.Rmd
 
-```{r consensus_50}
+```{r consensus_50, eval=FALSE}
 ## matching the parameters used by Russell
 W = zinb50@W
 fn = '../data/clustExp_W_k50.rda'
@@ -258,7 +274,7 @@ if(runClus) {
 }
 ```
 
-```{r combine_50}
+```{r combine_50, eval=FALSE}
 combined <- combineMany(cl_res, proportion = 0.7)
 plotClusters(combined, colPalette = c(bigPalette, rainbow(100)))
 plotCoClustering(combined)
@@ -266,13 +282,13 @@ table(primaryClusterNamed(combined))
 sum(primaryCluster(combined) == -1)
 ```
 
-```{r new_clusters}
+```{r new_clusters, eval=FALSE}
 plot(getW(zinb50), col=clus.labels, main = 'color = previous')
 plot(getW(zinb50), col=as.factor(primaryCluster(combined)), main = 'color = new')
 table(data.frame(previous = clus.labels, new = primaryCluster(combined)))
 ```
 
-```{r merged}
+```{r merged, eval=FALSE}
 combined <- makeDendrogram(combined)
 plotDendrogram(combined)
 merged <- mergeClusters(combined, mergeMethod = "locfdr", cutoff = 0.01)
@@ -280,12 +296,12 @@ merged <- mergeClusters(combined, mergeMethod = "locfdr", cutoff = 0.01)
 
 Just to see what it looks like, let's look at the heatmap on the W (number of cells x K=50). Now, we would like to plot a heatmap using the residuals (number of cells x number of genes). When I call plotHeatmap using argument visualizeData = residuals_matrix, it does not work and says that if give separate visualizeData, must be of same dimensions as assay(data).
 
-```{r heatmap}
+```{r heatmapOld, eval=FALSE}
 plotHeatmap(merged, clusterSamplesData="dendrogramValue", breaks = .99)
 ```
 
 So, let's look at a heatmap on deviance residuals using heatmap.2 from gplots package with all the 1000 most variable genes.
-```{r}
+```{r, eval=FALSE}
 palDF = merged@clusterLegend[[1]]
 pal = palDF[, 'color']
 names(pal) = palDF[, 'name']
