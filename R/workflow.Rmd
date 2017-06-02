@@ -60,9 +60,12 @@ I am still using the data Davide gave me a while ago. And I think now it is not 
 
 EAP: I have updated the code to pull from a dataset on the repos that is created with the `createData.R` file. For now, I am filtering to the top 1000 most variable genes there, though we might want to add that to the code for the article. This will be slightly different data from Russell's, which didn't use all of the samples. We can adjust that decision later, or just compare the samples that are the same. (Russell's clusterLabels are in the meta data)
 
+EAP: zinbFit doesn't accept data.frame objects, so currently have to have a `data.matrix` command. Should it be changed so that it does?
+
 ```{r datain}
 #counts<-read.table("../data/oeCufflinkCountData.txt",sep="\t",header=TRUE)
 core<-read.table("../data/oeCufflinkCountData_1000Var.txt",sep="\t",header=TRUE)
+core<-data.matrix(core)
 metadata<-read.table("../data/oeMetadata.txt",sep="\t",header=TRUE)
 # load("../data/Expt4c2b_filtdata.Rda")
 # load("../data/E4c2b_slingshot_wsforkelly.RData")
@@ -218,7 +221,7 @@ fn = '../data/clustExp_W_k50.rda'
 if(runClus) {
 ceObj <- RSEC(t(W), k0s = 4:15, alphas = c(0.1), betas = 0.8,
                       clusterFunction = "hierarchical01", minSizes=1,
-                      sequential = TRUE, subsample = TRUE, ncores = NCORES,
+                      ncores = NCORES,
 					  combineProportion = 0.7,mergeMethod = "locfdr", mergeCutoff = 0.01
                       subsampleArgs = list(resamp.num=100,
                                            clusterFunction="kmeans",
