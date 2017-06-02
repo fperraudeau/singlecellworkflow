@@ -22,7 +22,6 @@ bio <- droplevels(pData(Cufflinks_eSet)$MD_expt_condition)
 
 clusterLabels<-read.table("../data/oeHBCdiff_clusterLabels.txt",sep="\t",stringsAsFactors=FALSE)
 m<-match(colnames(E) ,clusterLabels[,1])
-
 metaData<-data.frame("Experiment"=bio,"Batch"=batch,"clusterLabels"=clusterLabels[m,2],qc)
 
 # filtering to top 1000 most variable:

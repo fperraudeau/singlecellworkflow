@@ -13,21 +13,22 @@ output:
 
 ```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
 knitr::opts_chunk$set(fig.align="center", cache=TRUE, error=FALSE, message=FALSE, warning=TRUE)
-library(SummarizedExperiment)
+#bioconductor:
 library(scRNAseq)
+library(scone)
+library(clusterExperiment)
+#github
 library(zinbwave)
+library(slingshot)
+#CRAN
 library(ggplot2)
 library(gplots)
 library(magrittr)
 library(matrixStats)
 library(Rtsne)
-library(scone)
 library(RColorBrewer)
 library(digest)
-library(scone)
-library(slingshot)
 library(rARPACK)
-library(clusterExperiment)
 set.seed(20)
 ```
 
@@ -218,15 +219,17 @@ EAP: Fanny, we should really be using the RSEC function for all the steps of the
 
 ```{r rsec_50}
 fn = '../data/clustExp_W_k50.rda'
+metadata$clusterLabels[is.na(metadata$clusterLabels)]<- -2 #symbol for samples missing from original clustering
+seObj<-SummarizedExperiment(t(W),colData=metadata)
 if(runClus) {
-ceObj <- RSEC(t(W), k0s = 4:15, alphas = c(0.1), betas = 0.8,
+ print(system.time(ceObj <- RSEC(seObj, k0s = 4:15, alphas = c(0.1), betas = 0.8,
                       clusterFunction = "hierarchical01", minSizes=1,
                       ncores = NCORES,
 					  combineProportion = 0.7,mergeMethod = "locfdr", mergeCutoff = 0.01
                       subsampleArgs = list(resamp.num=100,
                                            clusterFunction="kmeans",
                                            clusterArgs=list(nstart=10)),
-                      seqArgs = list(k.min=3, top.can=5), verbose=TRUE)
+                      seqArgs = list(k.min=3, top.can=5), verbose=TRUE))
 save(ceObj, file = fn)
 }
 else{
