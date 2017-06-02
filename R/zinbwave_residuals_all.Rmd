@@ -1,0 +1,423 @@
+---
+title: "Residuals in zinbwave, all genes"
+author: "Fanny Perraudeau, Davide Risso"
+date: "05/25/2017"
+output: 
+  html_document: 
+    fig_height: 7
+    fig_width: 7
+    toc: yes
+    code_folding: hide
+    toc_float: yes
+---
+
+```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
+knitr::opts_chunk$set(fig.align="center", cache=TRUE, error=FALSE, message=FALSE, warning=TRUE)
+library(zinbwave)
+library(matrixStats)
+library(gplots) #heatmap.2()
+library(clusterExperiment) #setBreaks()
+set.seed(20)
+NCORES = 8
+```
+
+
+# TL;DR
+
+The goal of this document is to look at residuals and see if we could use the residuals to look at some sort of adjusted "counts" (residuals can be negative, so we should probably find another name than "counts"). First, I fitted zinbwave without the batches in the X, then I included the batches in the X. For each scenario, I looked at naive, naive on the log scale, Pearson, and deviance residuals. I plotted the PCA of the residuals with two coloring (batch and clusters) and boxplots of the residuals for each cell.
+
+
+# Unnormalized data
+I am still using the data Davide gave me a while ago. And I think now it is not the same data Davide is using in its most recent vignette (that is zinb_clustering_over_k.Rmd). It should not be very important but it would be nice if we have a common dataset we can work on.
+
+
+```{r datain}
+load("../data/Expt4c2b_filtdata.Rda")
+load("../data/E4c2b_slingshot_wsforkelly.RData")
+de = read.csv('../data/oe_markers.txt', stringsAsFactors = F, header = F)
+de = de$V1
+```
+
+
+Here we only look at all the genes.
+```{r filtering}
+names(batch) <- colnames(counts)
+
+counts <- counts[,names(clus.labels)]
+batch <- droplevels(batch[names(clus.labels)])
+qc <- qc[names(clus.labels),]
+
+#vars <- rowVars(log1p(counts))
+#names(vars) <- rownames(counts)
+#vars <- sort(vars, decreasing = TRUE)
+#core <- counts[names(vars)[1:1000],]
+core = counts
+```
+
+
+We have `r ncol(counts)` cells. To speed up the computations, we will focus on the top 1,000 most variable genes.
+```{r lookatdata}
+dim(core)
+core[1:3, 1:3]
+```
+
+Cells have been processed in `r length(unique(batch))` different batches
+```{r tabbatch}
+table(batch)
+```
+
+Cells have been clustered into `r length(unique(clus.labels))` different clusters
+```{r tabclus}
+table(clus.labels)
+```
+
+Batches are kind of confounded with the biology
+```{r}
+table(data.frame(batch = as.vector(batch),
+                 cluster = clus.labels))
+
+```
+
+
+```{r}
+plotBoxplot <- function(y, main = '', col, log = F){
+  if (log) y = log2(y + 1)
+  boxplot(y, main=main, col=col, staplewex=0, outline=0, 
+          border=col, xaxt='n')
+  abline(h=0)
+}
+
+compute.naive.residuals <- function(Y, zinb){
+  mu_hat = t(getMu(zinb)) 
+  pi_hat = t(getPi(zinb)) 
+  Y_hat = (1 - pi_hat) * mu_hat
+  Y - Y_hat 
+}
+
+compute.log.naive.residuals <- function(Y, zinb){
+  mu = t(getMu(zinb)) 
+  pi = t(getPi(zinb)) 
+  phi = matrix(rep(getPhi(zinb), ncol(Y)), ncol = ncol(Y))
+  var_hat = (1 - pi) * mu * (1 + mu * (phi + pi))
+  Y_hat = (1 - pi) * mu
+  log_Y_hat_plus_1 = log(1 + Y_hat) - var_hat / (2*(1 + Y_hat)^2)
+  log(Y + 1) - log_Y_hat_plus_1
+}
+
+
+compute.pearson.residuals <- function(Y, zinb){
+  num = compute.naive.residuals(Y, zinb)
+  mu = t(getMu(zinb)) 
+  pi = t(getPi(zinb)) 
+  phi = matrix(rep(getPhi(zinb), ncol(Y)), ncol = ncol(Y))
+  var_hat = (1 - pi) * mu * (1 + mu * (phi + pi))
+  num / sqrt(var_hat)  
+}
+
+compute.zinb.loglik <- function(Y, zinb){
+  mu = t(getMu(zinb)) 
+  theta = getTheta(zinb)
+  theta_mat = matrix(rep(theta, ncol(Y), ncol = ncol(Y)))
+  pi = t(getPi(zinb))
+  log( pi * (Y == 0) + (1 - pi) * dnbinom(Y, size = theta, mu = mu) )
+}
+
+compute.deviance.residuals <- function(Y, zinb){
+  mu_hat = t(getMu(zinb)) 
+  pi_hat = t(getPi(zinb)) 
+  Y_hat = (1 - pi_hat) * mu_hat
+  ll = compute.zinb.loglik(Y, zinb)
+  sign = 1*(Y - Y_hat > 0)
+  sign[sign == 0] = -1
+  sign * sqrt(-2 * ll)
+}
+
+```
+
+# X intercept, no batch
+Let's run zinbwave with K = 0 and X with an intercept only (no batch).
+```{r}
+print(system.time(zinb <- zinbFit(core, ncores = NCORES, K = 0)))
+```
+
+
+## Naive residuals
+```{r}
+Rn = compute.naive.residuals(core, zinb)
+Rn[1:3,1:3]
+```
+
+PCA (centered not scale) of residuals, first colored by batch (left), then by clusters (right). On the left side, we should not see patterns whereas on the right hand side we should.
+```{r}
+pca = prcomp(t(Rn))
+par(mfrow = c(1,2))
+plot(pca$x, col = batch, pch = 19,
+     main="PCA of residuals\ncolor=batch")
+plot(pca$x, col = clus.labels, pch = 19,
+     main = "PCA of residuals\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+```{r}
+de_1000 = de[de %in% rownames(Rn)]
+length(de_1000)
+head(de_1000)
+```
+
+
+Each boxplot is for a cell. Colors correspond to the batches. When colors are the same but boxplots are not next to each others it corresponds to different batches. We would expect that the residuals look similar for the different batches.
+```{r}
+Rn_order = Rn[, order(as.numeric(batch))]
+col_order = as.numeric(batch)[order(as.numeric(batch))]
+plotBoxplot(Rn_order, main = 'Boxplot of residuals\ncolor=batch',
+            col = col_order)
+```
+
+```{r}
+breaks = setBreaks(Rn[de_1000, ], breaks = 0.99)
+heatmap.2(Rn[de_1000, ], breaks = breaks,
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Naive Residuals')
+```
+
+## Naive residuals of log(Y+1)
+```{r}
+Rn = compute.log.naive.residuals(core, zinb)
+Rn[1:3,1:3]
+```
+
+```{r}
+pca = prcomp(t(Rn))
+par(mfrow = c(1,2))
+plot(pca$x, col = batch, pch = 19,
+     main="PCA of residuals\ncolor=batch")
+plot(pca$x, col = clus.labels, pch = 19,
+     main = "PCA of residuals\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+
+```{r}
+Rn_order = Rn[, order(as.numeric(batch))]
+col_order = as.numeric(batch)[order(as.numeric(batch))]
+plotBoxplot(Rn_order, main = 'Boxplot of residuals\ncolor=batch',
+            col = col_order)
+```
+
+```{r}
+heatmap.2(Rn[de_1000, ], breaks = breaks,
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Log naive residuals')
+```
+
+## Pearson residuals
+```{r}
+Rp = compute.pearson.residuals(core, zinb)
+Rp[1:3,1:3]
+```
+
+```{r}
+pca = prcomp(t(Rp))
+par(mfrow = c(1,2))
+plot(pca$x, col = batch, pch = 19,
+     main="PCA of residuals\ncolor=batch")
+plot(pca$x, col = clus.labels, pch = 19,
+     main = "PCA of residuals\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+```{r}
+Rp_order = Rp[, order(as.numeric(batch))]
+col_order = as.numeric(batch)[order(as.numeric(batch))]
+plotBoxplot(Rp_order, main = 'Boxplot of residuals\ncolor=batch',
+            col = col_order)
+```
+
+```{r}
+heatmap.2(Rp[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Pearson residuals')
+```
+
+## Deviance residuals
+```{r}
+Rd = compute.deviance.residuals(core, zinb)
+Rd[1:3,1:3]
+```
+
+```{r}
+pca = prcomp(t(Rd))
+par(mfrow = c(1,2))
+plot(pca$x, col = batch, pch = 19,
+     main="PCA of residuals\ncolor=batch")
+plot(pca$x, col = clus.labels, pch = 19,
+     main = "PCA of residuals\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+```{r}
+Rd_order = Rd[, order(as.numeric(batch))]
+col_order = as.numeric(batch)[order(as.numeric(batch))]
+plotBoxplot(Rd_order, main = 'Boxplot of residuals\ncolor=batch',
+            col = col_order)
+```
+
+```{r}
+heatmap.2(Rd[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Deviance residuals')
+```
+
+# X batches
+Let's run zinbwave with K = 0 and X with an intercept only (no batch).
+```{r}
+mod = model.matrix( ~ batch)
+print(system.time(zinb_batch <- zinbFit(core, ncores = NCORES, K = 0,
+                                  X = mod)))
+```
+
+
+## Naive residuals
+```{r}
+Rn = compute.naive.residuals(core, zinb_batch)
+Rn[1:3,1:3]
+```
+
+```{r}
+pca = prcomp(t(Rn))
+par(mfrow = c(1,2))
+plot(pca$x, col = batch, pch = 19,
+     main="PCA of residuals\ncolor=batch")
+plot(pca$x, col = clus.labels, pch = 19,
+     main = "PCA of residuals\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+```{r}
+Rn_order = Rn[, order(as.numeric(batch))]
+col_order = as.numeric(batch)[order(as.numeric(batch))]
+plotBoxplot(Rn_order, main = 'Boxplot of residuals\ncolor=batch',
+            col = col_order)
+```
+
+```{r}
+breaks = setBreaks(Rn[de_1000, ], breaks = 0.99)
+heatmap.2(Rn[de_1000, ], breaks = breaks,
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Naive Residuals')
+```
+
+## Naive residuals of log(Y+1)
+```{r}
+Rn = compute.log.naive.residuals(core, zinb)
+Rn[1:3,1:3]
+```
+
+```{r}
+pca = prcomp(t(Rn))
+par(mfrow = c(1,2))
+plot(pca$x, col = batch, pch = 19,
+     main="PCA of residuals\ncolor=batch")
+plot(pca$x, col = clus.labels, pch = 19,
+     main = "PCA of residuals\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+
+```{r}
+Rn_order = Rn[, order(as.numeric(batch))]
+col_order = as.numeric(batch)[order(as.numeric(batch))]
+plotBoxplot(Rn_order, main = 'Boxplot of residuals\ncolor=batch',
+            col = col_order)
+```
+```{r}
+heatmap.2(Rn[de_1000, ], breaks = breaks,
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Log naive residuals')
+```
+
+## Pearson residuals
+```{r}
+Rp = compute.pearson.residuals(core, zinb_batch)
+Rp[1:3,1:3]
+```
+
+```{r}
+pca = prcomp(t(Rp))
+par(mfrow = c(1,2))
+plot(pca$x, col = batch, pch = 19,
+     main="PCA of residuals\ncolor=batch")
+plot(pca$x, col = clus.labels, pch = 19,
+     main = "PCA of residuals\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+```{r}
+Rp_order = Rp[, order(as.numeric(batch))]
+col_order = as.numeric(batch)[order(as.numeric(batch))]
+plotBoxplot(Rp_order, main = 'Boxplot of residuals\ncolor=batch',
+            col = col_order)
+```
+
+```{r}
+heatmap.2(Rp[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Pearson residuals')
+```
+
+## Deviance residuals
+```{r}
+Rd = compute.deviance.residuals(core, zinb_batch)
+Rd[1:3,1:3]
+```
+
+```{r}
+pca = prcomp(t(Rd))
+par(mfrow = c(1,2))
+plot(pca$x, col = batch, pch = 19,
+     main="PCA of residuals\ncolor=batch")
+plot(pca$x, col = clus.labels, pch = 19,
+     main = "PCA of residuals\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+```{r}
+Rd_order = Rd[, order(as.numeric(batch))]
+col_order = as.numeric(batch)[order(as.numeric(batch))]
+plotBoxplot(Rd_order, main = 'Boxplot of residuals\ncolor=batch',
+            col = col_order)
+```
+
+```{r}
+heatmap.2(Rd[de_1000, ],
+          col = colorRampPalette(c('blue', 'yellow'))(51),
+          scale = 'none', trace = 'none',
+          ColSideColors = as.character(clus.labels),
+          labCol = '', main = 'Deviance residuals')
+```
+
+# Conclusions 
+
+As batches are somehow confounded with the biology, I don't know if we should adjust or not for the batches. For the residuals, it seems that the Pearson residuals when not adjusting for batches is the most informative (at least, when looking at PC 1 and 2).
+
+
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
