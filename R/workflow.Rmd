@@ -30,7 +30,7 @@ library(RColorBrewer)
 library(digest)
 library(rARPACK)
 set.seed(20)
-if(packageVersion("clusterExperiment")<'1.3.0.9004') stop("must have current develop version to avoid bugs")
+if(packageVersion("clusterExperiment")<'1.3.0.9005') stop("must have current develop version to avoid bugs")
 ```
 
 
