@@ -1,7 +1,7 @@
 ---
 title: "Worflow"
-author: "Fanny Perraudeau"
-date: "05/25/2017"
+author: "Workflow team"
+date: "06/06/2017"
 output: 
   html_document: 
     fig_height: 7
@@ -35,104 +35,16 @@ if(packageVersion("clusterExperiment")<'1.3.0.9006') stop("must have current dev
 
 
 ```{r}
-runZinb = TRUE
-runClus = TRUE
-NCORES = 2
+runZinb <- FALSE
+runClus <- TRUE
+NCORES <- 8
 ```
-
-# TL;DR
-
-This document is a temptative of workflow with the following steps  
-
-- Fit zinbwave with K = 50, X including the batches,   
-- Get W which should capture the biology,  
-- Use clusterExperiment on W,   
-- Get the cluster labels,   
-- Use slingshot on W from zinbwave and with cluster labels from clusterExperiment,  
-- Get lineages,  
-- Fit again zinbwave but with X including batches and lineages from slingshot,  
-- Get DE genes between lineages.  
-
-Along the worflow, use deviance residuals as adjusted "counts".
-
-EAP: small request. Can everyone put a line between the beginning of a r chunk and text? It makes it nicely formated for my text editor. 
-
-# Unnormalized data
-I am still using the data Davide gave me a while ago. And I think now it is not the same data Davide is using in its most recent vignette (that is zinb_clustering_over_k.Rmd). It should not be very important but it would be nice if we have a common dataset we can work on.
-
-EAP: I have updated the code to pull from a dataset on the repos that is created with the `createData.R` file. For now, I am filtering to the top 1000 most variable genes there, though we might want to add that to the code for the article. This will be slightly different data from Russell's, which didn't use all of the samples. We can adjust that decision later, or just compare the samples that are the same. (Russell's clusterLabels are in the meta data)
-
-EAP: zinbFit doesn't accept data.frame objects, so currently have to have a `data.matrix` command. Should it be changed so that it does?
-
-```{r datain}
-#counts<-read.table("../data/oeCufflinkCountData.txt",sep="\t",header=TRUE)
-core<-read.table("../data/oeCufflinkCountData_1000Var.txt",sep="\t",header=TRUE)
-core<-data.matrix(core)
-metadata<-read.table("../data/oeMetadata.txt",sep="\t",header=TRUE)
-# load("../data/Expt4c2b_filtdata.Rda")
-# load("../data/E4c2b_slingshot_wsforkelly.RData")
-```
-
-
-Here we only look at the 1000 most variable genes. EAP: see note above, I've commented out the filtering and added it to the `createData.R` for now. 
-
-```{r filtering}
-batch <- metadata$Batch
-qc <- metadata[,!names(metadata)%in% c("Batch","Experiment","clusterLabels")]
-clus.labels<-metadata[,"clusterLabels"]
-# vars <- rowVars(log1p(counts))
-# names(vars) <- rownames(counts)
-# vars <- sort(vars, decreasing = TRUE)
-# core <- counts[names(vars)[1:1000],]
-```
-
-
-We have `r ncol(core)` cells.
-
-```{r lookatdata}
-dim(core)
-core[1:3, 1:3]
-```
-
-Cells have been processed in `r length(unique(batch))` different batches
-
-```{r tabbatch}
-table(batch)
-```
-
-Cells have been clustered into `r length(unique(clus.labels))` different clusters
-
-```{r tabclus}
-table(clus.labels)
-```
-
-Batches are kind of confounded with the biology
-
-```{r}
-table(data.frame(batch = as.vector(batch),
-                 cluster = clus.labels))
-```
-
 
 EAP: if we are going to ultimately use these functions, it would be good to add them to the package for zinbwave.
 
-```{r}
-compute.naive.residuals <- function(Y, zinb){
-  mu_hat = t(getMu(zinb)) 
-  pi_hat = t(getPi(zinb)) 
-  Y_hat = (1 - pi_hat) * mu_hat
-  Y - Y_hat 
-}
+FP: yes, I agree.
 
-compute.pearson.residuals <- function(Y, zinb){
-  num = compute.naive.residuals(Y, zinb)
-  mu = t(getMu(zinb)) 
-  pi = t(getPi(zinb)) 
-  phi = matrix(rep(getPhi(zinb), ncol(Y)), ncol = ncol(Y))
-  var_hat = (1 - pi) * mu * (1 + mu * (phi + pi))
-  num / sqrt(var_hat)  
-}
-
+```{r residuals}
 compute.zinb.loglik <- function(Y, zinb){
   mu = t(getMu(zinb)) 
   theta = getTheta(zinb)
@@ -152,95 +64,214 @@ compute.deviance.residuals <- function(Y, zinb){
 }
 ```
 
-# 0. Residuals for visualization
-## Fit zinbwave X intercept, no batch
-Let's run zinbwave with K = 0 and X batches.
+
+# TL;DR
+
+This document is a temptative of workflow with the following steps  
+
+- Dimensionality reduction using zinbwave to get W which should capture the biology,
+- Cluster cells using clusterExperiment on W to get the cluster labels,   
+- Get lineage using slingshot on W and cluster labels from clusterExperiment,  
+- Get DE genes between lineages/clusters.  
+
+Along the worflow, use deviance residuals as adjusted values.
+
+EAP: small request. Can everyone put a line between the beginning of a r chunk and text? It makes it nicely formated for my text editor. 
+
+# Steps of the workflow
+## Create a SummarizedExperiment object
+
+Along the workflow, we want to use a unique SummarizedExperiement object carrying all the data we need.
+
+EAP: I have updated the code to pull from a dataset on the repos that is created with the `createData.R` file. For now, I am filtering to the top 1000 most variable genes there, though we might want to add that to the code for the article. This will be slightly different data from Russell's, which didn't use all of the samples. We can adjust that decision later, or just compare the samples that are the same. (Russell's clusterLabels are in the meta data)
+
+EAP: zinbFit doesn't accept data.frame objects, so currently have to have a `data.matrix` command. Should it be changed so that it does?
+
+```{r datain}
+#counts<-read.table("../data/oeCufflinkCountData.txt",sep="\t",header=TRUE)
+core <- read.table("../data/oeCufflinkCountData_1000Var.txt",
+                   sep = "\t", header = TRUE)
+core <- data.matrix(core)
+metadata <- read.table("../data/oeMetadata.txt", sep = "\t", header = TRUE)
+# symbol for samples missing from original clustering
+metadata$clusterLabels[is.na(metadata$clusterLabels)] <- -2
+```
+
+Here we only look at the 1000 most variable genes. EAP: see note above, I've commented out the filtering and added it to the `createData.R` for now. 
+
+
+
+```{r batches}
+batch <- metadata$Batch
+```
+
+Cells have been processed in `r length(unique(batch))` different batches
 
 ```{r}
-fn = '../data/zinb_k0_batch.rda'
+col_batch = rep(brewer.pal(9, "Set1"), 2)
+names(col_batch) = unique(batch)
+table(batch)
+```
+
+We have qc measures from the data
+
+```{r qc}
+qc <- metadata[, !names(metadata) %in% c("Batch", "Experiment", "clusterLabels")]
+head(qc, 2)
+```
+
+```{r clusterlabels}
+clus.labels <- metadata[, "clusterLabels"]
+```
+
+In published work (FP: add ref), cells have been clustered into `r length(unique(clus.labels))` different clusters
+
+```{r}
+col_clus <- c("transparent", brewer.pal(12, "Set3"), brewer.pal(8, "Set2"))
+col_clus <- col_clus[1:length(unique(clus.labels))]
+names(col_clus) <- sort(unique(clus.labels))
+table(clus.labels)
+```
+
+Batches are kind of confounded with the biology
+
+```{r}
+table(data.frame(batch = as.vector(batch),
+                 cluster = clus.labels))
+```
+
+
+We have `r ncol(core)` cells.
+
+```{r lookatdata}
+dim(core)
+core[1:3, 1:3]
+```
+
+
+Let's create a SummarizedExperiment object to store the raw counts and information about the data, that is batches, published labels, and quality control measures.
+
+```{r}
+se <- SummarizedExperiment(assays = list(rawCounts = core), colData = metadata)
+```
+
+
+## Dimensionality reduction adjusting for gene and cell level covariates
+
+To cluster and get lineages we want to reduce the dimension of the data. We are going to use zinbwave to do so. First, let's fit zinbwave with first K = 0 to compute normalized values (i.e. deviance residuals) adjusted for batches. We could also adjust for gene length or GC content here. We then fit zinbwave to get the dimensionality reduced matrix W specifying the number of dimension K = 50. Eventually, we will call zinbwave just once where we would have an argument in zinbFit like "compute_normalized_values" in c(TRUE, FALSE). For K = 0 and K = 50, we correct for batch effect including batches in X.
+
+```{r}
+fn50 <- '../data/zinb_k50_batch.rda'
+fn0 <- '../data/zinb_k0_batch.rda'
 if (runZinb){
   mod = model.matrix( ~ batch)
-  print(system.time(zinb0 <- zinbFit(core, K = 0, X = mod, ncores = NCORES)))
-  save(zinb0, file = fn)
+  # K = 0
+  print(system.time(zinb0 <- zinbFit(core, ncores = NCORES, K = 0, X = mod)))
+  save(zinb0, file = f50)
+  # K = 50
+  print(system.time(zinb50 <- zinbFit(core, ncores = NCORES, K = 50, X = mod)))
+  save(zinb50, file = fn50)
 }else{
-  load(fn)
+  load(fn50)
+  load(fn0)
 }
 ```
 
-We use deviance residuals for visualization. Let's check that deviance residuals look ok.
+### Normalized values
+
+We use deviance residuals as normalized values for visualization. FP: explain rational: K=0 so residuals capture the bio adjusting for batch. Let's check that deviance residuals look ok.
 
 ```{r}
-res = compute.deviance.residuals(core, zinb0)
+res <- compute.deviance.residuals(core, zinb0)
 res[1:3,1:3]
 ```
 
-PCA on the residuals where color are for batches on the left and previously found clusters on the right.
+Boxplot of the normalized values for each cell. It seems that correction for batches is ok.
 
 ```{r}
-pca = prcomp(t(res))
+res_order <- res[, order(as.numeric(batch))]
+col_order <- as.numeric(batch)[order(as.numeric(batch))]
+boxplot(res_order, main='Boxplot of normalized values\ncolor=batch',
+        col = col_order, staplewex = 0, outline = 0, border = col_order, xaxt = 'n')
+```
+
+PCA on the normalized values where color are for batches on the left and previously found clusters on the right. We want no clustering on the left side and clustering on the right side.
+
+```{r}
+pca <- prcomp(t(res))
 par(mfrow = c(1,2))
-plot(pca$x, col = batch, pch = 19,
-     main="PCA of residuals\ncolor=batch")
-plot(pca$x, col = clus.labels, pch = 19,
-     main = "PCA of residuals\ncolor=cluster")
+plot(pca$x, col = col_batch[batch], pch = 20,
+     main="PCA of normalized values\ncolor=batch")
+plot(pca$x, col = col_clus[as.character(clus.labels)], pch = 20,
+     main = "PCA of normalized values\ncolor=cluster")
 par(mfrow = c(1,1))
 ```
 
-Boxplot of the residuals for each cell.
+Let's add the normalized values as an assay dataset in our SummarizedExperiment object.
 
 ```{r}
-res_order = res[, order(as.numeric(batch))]
-col_order = as.numeric(batch)[order(as.numeric(batch))]
-boxplot(res_order, main='Boxplot of residuals\ncolor=batch', col = col_order,         staplewex = 0, outline = 0, border = col_order, xaxt = 'n')
+assays(se)[['normalizedValues']] <- res
 ```
 
-Deviance residuals seem ok.
+### W
 
-# 1. zinbwave with raw counts
-
-Let's run zinbwave with K = 50 and X including batches.
+Let's check that performing MDS on W we have something coherent with published clusters.
 
 ```{r}
-fn = '../data/zinb_k50_batch.rda'
-if (runZinb){
-  mod = model.matrix( ~ batch)
-  print(system.time(zinb50 <- zinbFit(core, ncores = NCORES, K = 50,
-                                      X = mod)))
-  save(zinb50, file = fn)
-}else{
-  load(fn)
-}
+W <- getW(zinb50)
+d <- dist(W)
+fit <- cmdscale(d, eig = TRUE, k = 2)
+plot(fit$points, col = col_clus[as.character(clus.labels)], main = 'MDS', pch = 20,
+     xlab = 'Component 1', ylab = 'Component 2')
+legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
+       fill = unique(col_clus), title = 'Sample')
+```
+
+Let's add W to the colData of our SummarizedExperiment object.
+
+```{r}
+W <- data.frame(W)
+colnames(W) <- paste0('W', 1:ncol(W))
+colData(se) <- cbind(colData(se), W)
 ```
 
 
-# 2. clusterExperiment with W
+FP: what do you think of implemented a "compute_normalized_values" argument to zinbFit for summarizedExperiment objects where zinbFit would take as input a SummarizedExperiment object and return a summarizedExperiment object with slots added for normalized values and W?
+
+## Cluster of cells
+
+We use clusterExperiment with W.
 
 EAP: Fanny, we should really be using the RSEC function for all the steps of the clustering. I've put in the code, but I set `eval=FALSE` because I don't have the data to test it. I also am not sure that we want to set the options for `subsampleArgs` and `seqArgs` since those are suppose to be sort of esoteric concerns...
 
+FP: What about the following call to RSEC?
 
 ```{r rsec_50}
-fn = '../data/clustExp_W_k50.rda'
-metadata$clusterLabels[is.na(metadata$clusterLabels)]<- -2 #symbol for samples missing from original clustering
-seObj<-SummarizedExperiment(t(W),colData=metadata)
-if(runClus) {
- print(system.time(ceObj <- RSEC(seObj, k0s = 4:15, alphas = c(0.1), betas = 0.8,
-                      clusterFunction = "hierarchical01", minSizes=1,
-                      ncores = NCORES,
-					  combineProportion = 0.7,mergeMethod = "locfdr", mergeCutoff = 0.01
-                      subsampleArgs = list(resamp.num=100,
-                                           clusterFunction="kmeans",
-                                           clusterArgs=list(nstart=10)),
-                      seqArgs = list(k.min=3, top.can=5), verbose=TRUE))
-save(ceObj, file = fn)
-}
-else{
-	load(fn)
+W = colData(se)[, grepl('^W', colnames(colData(se)))]
+W = as.matrix(W)
+fn = '../data/RSEC_W.rda'
+if (runClus){
+  print(system.time(ceObj <- RSEC(t(W), k0s = 4:15, 
+                                  clusterFunction = "hierarchical01",
+                                  minSizes = 5,
+                                  ncores = NCORES,
+                                  combineProportion = 0.7,
+                                  mergeMethod = "locfdr", mergeCutoff = 0.01)))
+  save(ceObj, file = fn)
+}else{
+  load(fn)
 }
 ```
 
 ```{r examineCombineMany}
 plotClusters(ceObj, colPalette = c(bigPalette, rainbow(100)))
+```
+
+```{r plotcoclust}
 plotCoClustering(ceObj)
+```
+
+```{r}
 table(primaryClusterNamed(ceObj))
 sum(primaryCluster(ceObj) == -1)
 ```
@@ -255,56 +286,9 @@ plotHeatmap(ceObj, clusterSamplesData="dendrogramValue", breaks = .99)
 ```
 
 ```{r compareClusters}
-plot(getW(zinb50), col=clus.labels, main = 'color = previous')
-plot(getW(zinb50), col=as.factor(primaryCluster(ceObj)), main = 'color = new')
+plot(W, col = col_clus[as.character(clus.labels)], main = 'color = previous', pch = 20)
+plot(W, col = as.factor(primaryCluster(ceObj)), main = 'color = new', pch = 20)
 table(data.frame(previous = clus.labels, new = primaryCluster(ceObj)))
-```
-
-## Original ClusterExperiment code (in Steps)
-I use the code of Davide from zinb_clutering_over_k.Rmd
-
-```{r consensus_50, eval=FALSE}
-## matching the parameters used by Russell
-W = zinb50@W
-fn = '../data/clustExp_W_k50.rda'
-if(runClus) {
-  cl_res <- clusterMany(t(W), ks = 4:15, alphas = c(0.1), betas = 0.8,
-                        clusterFunction = "hierarchical01", minSizes=1,
-                        sequential = TRUE, subsample = TRUE, ncores = 7,
-                        subsampleArgs = list(resamp.num=100,
-                                             clusterFunction="kmeans",
-                                             clusterArgs=list(nstart=10)),
-                        seqArgs = list(k.min=3, top.can=5), verbose=TRUE)
-  save(cl_res, file = fn)
-} else {
-  load(fn)
-}
-```
-
-```{r combine_50, eval=FALSE}
-combined <- combineMany(cl_res, proportion = 0.7)
-plotClusters(combined, colPalette = c(bigPalette, rainbow(100)))
-plotCoClustering(combined)
-table(primaryClusterNamed(combined))
-sum(primaryCluster(combined) == -1)
-```
-
-```{r new_clusters, eval=FALSE}
-plot(getW(zinb50), col=clus.labels, main = 'color = previous')
-plot(getW(zinb50), col=as.factor(primaryCluster(combined)), main = 'color = new')
-table(data.frame(previous = clus.labels, new = primaryCluster(combined)))
-```
-
-```{r merged, eval=FALSE}
-combined <- makeDendrogram(combined)
-plotDendrogram(combined)
-merged <- mergeClusters(combined, mergeMethod = "locfdr", cutoff = 0.01)
-```
-
-Just to see what it looks like, let's look at the heatmap on the W (number of cells x K=50). Now, we would like to plot a heatmap using the residuals (number of cells x number of genes). When I call plotHeatmap using argument visualizeData = residuals_matrix, it does not work and says that if give separate visualizeData, must be of same dimensions as assay(data).
-
-```{r heatmapOld, eval=FALSE}
-plotHeatmap(merged, clusterSamplesData="dendrogramValue", breaks = .99)
 ```
 
 So, let's look at a heatmap on deviance residuals using heatmap.2 from gplots package with all the 1000 most variable genes.
@@ -313,7 +297,7 @@ palDF = merged@clusterLegend[[1]]
 pal = palDF[, 'color']
 names(pal) = palDF[, 'name']
 
-heatmap.2(res, Colv = merged@dendro_samples,
+plotHeatmap(res, Colv = merged@dendro_samples,
           scale = 'none', trace = 'none', 
           col = colorRampPalette(c('blue', 'yellow'))(51),
           ColSideColors = pal[primaryClusterNamed(merged)],
@@ -323,8 +307,7 @@ legend("bottom", legend = names(pal), fill = pal, title = 'Clusters',
 ```
 
 
-
-# 3. slingshot with W and cluster labels
+## Get lineages
 I used the unsupervised mode on W got from fitting zinbwave with batches in X and K = 4.
 
 
@@ -362,12 +345,7 @@ print(lineages$lineage3)
 print(lineages$lineage4)
 ```
 
-# 4. zinbwave with lineages
-
-Which clusters would it make sense to test one versus the other? Would it be interesting to do two by two comparison between clusters next to each other in the different lineages?
-
-
-# 5. DE genes with betas
+## DE analysis
 
 DE analysis using ZINB-Wave has not been implemented yet and we are still thinking about it. Would it make sense just to test the betas between clusters making the assumption that the genes are independent? Below is just a visualization of what we could have at the end of the worflow: a heatmap of the deviance residuals for DE genes between clusters.
 
