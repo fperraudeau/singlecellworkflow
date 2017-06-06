@@ -42,7 +42,7 @@ NCORES <- 10
 
 EAP: if we are going to ultimately use these functions, it would be good to add them to the package for zinbwave.
 
-FP: yes, I agree.
+FP: yes, I agree. We would ideally work with a SummarizedExperiment object where we would add an assay for the normalized values.
 
 ```{r residuals}
 compute.zinb.loglik <- function(Y, zinb){
@@ -69,10 +69,10 @@ compute.deviance.residuals <- function(Y, zinb){
 
 This document is a temptative of workflow with the following steps  
 
-- Dimensionality reduction using zinbwave to get W which should capture the biology,
-- Cluster cells using clusterExperiment on W to get the cluster labels,   
-- Get lineage using slingshot on W and cluster labels from clusterExperiment,  
-- Get DE genes between lineages/clusters.  
+- Dimensionality reduction using zinbwave to get W which should capture the biology, 
+- Cluster cells using clusterExperiment on W to get the cluster labels,
+- Get lineage using slingshot on W from zinbwave and cluster labels from clusterExperiment,  
+- Get DE genes between lineages/clusters using a tool like MAST or edgeR. 
 
 Along the worflow, use deviance residuals as adjusted values.
 
@@ -155,7 +155,9 @@ se <- SummarizedExperiment(assays = list(rawCounts = core),
 
 ## Dimensionality reduction adjusting for gene and cell level covariates
 
-To cluster and get lineages we want to reduce the dimension of the data. We are going to use zinbwave to do so. First, let's fit zinbwave with first K = 0 to compute normalized values (i.e. deviance residuals) adjusted for batches. We could also adjust for gene length or GC content here. We then fit zinbwave to get the dimensionality reduced matrix W specifying the number of dimension K = 50. Eventually, we will call zinbwave just once where we would have an argument in zinbFit like "compute_normalized_values" in c(TRUE, FALSE). For K = 0 and K = 50, we correct for batch effect including batches in X.
+To cluster and get lineages we want to reduce the dimension of the data. We are going to use zinbwave to do so. First, let's fit zinbwave first with K = 0 to compute normalized values (i.e. deviance residuals) adjusted for batches. We could also adjust for gene length or GC content here. We then fit zinbwave to get the dimensionality reduced matrix W specifying the number of dimension K = 50. We could try different K here (maybe K = 100). We could also try to see if adding commondispersion = FALSE change the results.Eventually, we will call zinbwave just once where we would have an argument in zinbFit like "compute_normalized_values" in c(TRUE, FALSE).
+
+For K = 0 and K = 50, we correct for batch effect including batches in X.
 
 ```{r}
 fn0 <- '../data/zinb_k0_batch.rda'
@@ -181,7 +183,7 @@ if (runZinb & !file.exists(fn50)){
 
 ### Normalized values
 
-We use deviance residuals as normalized values for visualization. FP: explain rational: K=0 so residuals capture the bio adjusting for batch. Let's check that deviance residuals look ok.
+We use deviance residuals as normalized values for visualization. We use K = 0 so residuals capture the biology while adjusting for gene and cell level covariates, here we have only cell-level covariates (batches). Let's check that deviance residuals look ok.
 
 ```{r}
 res <- compute.deviance.residuals(core, zinb0)
