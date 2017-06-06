@@ -35,9 +35,9 @@ if(packageVersion("clusterExperiment")<'1.3.0.9006') stop("must have current dev
 
 
 ```{r}
-runZinb <- FALSE
-runClus <- TRUE
-NCORES <- 8
+runZinb <- T
+runClus <- T
+NCORES <- 10
 ```
 
 EAP: if we are going to ultimately use these functions, it would be good to add them to the package for zinbwave.
@@ -99,8 +99,6 @@ metadata$clusterLabels[is.na(metadata$clusterLabels)] <- -2
 
 Here we only look at the 1000 most variable genes. EAP: see note above, I've commented out the filtering and added it to the `createData.R` for now. 
 
-
-
 ```{r batches}
 batch <- metadata$Batch
 ```
@@ -140,7 +138,6 @@ table(data.frame(batch = as.vector(batch),
                  cluster = clus.labels))
 ```
 
-
 We have `r ncol(core)` cells.
 
 ```{r lookatdata}
@@ -148,11 +145,11 @@ dim(core)
 core[1:3, 1:3]
 ```
 
-
 Let's create a SummarizedExperiment object to store the raw counts and information about the data, that is batches, published labels, and quality control measures.
 
 ```{r}
-se <- SummarizedExperiment(assays = list(rawCounts = core), colData = metadata)
+se <- SummarizedExperiment(assays = list(rawCounts = core),
+                           colData = metadata)
 ```
 
 
@@ -161,19 +158,24 @@ se <- SummarizedExperiment(assays = list(rawCounts = core), colData = metadata)
 To cluster and get lineages we want to reduce the dimension of the data. We are going to use zinbwave to do so. First, let's fit zinbwave with first K = 0 to compute normalized values (i.e. deviance residuals) adjusted for batches. We could also adjust for gene length or GC content here. We then fit zinbwave to get the dimensionality reduced matrix W specifying the number of dimension K = 50. Eventually, we will call zinbwave just once where we would have an argument in zinbFit like "compute_normalized_values" in c(TRUE, FALSE). For K = 0 and K = 50, we correct for batch effect including batches in X.
 
 ```{r}
-fn50 <- '../data/zinb_k50_batch.rda'
 fn0 <- '../data/zinb_k0_batch.rda'
-if (runZinb){
-  mod = model.matrix( ~ batch)
-  # K = 0
-  print(system.time(zinb0 <- zinbFit(core, ncores = NCORES, K = 0, X = mod)))
-  save(zinb0, file = f50)
-  # K = 50
-  print(system.time(zinb50 <- zinbFit(core, ncores = NCORES, K = 50, X = mod)))
+if (runZinb & !file.exists(fn0)){
+  mod <- model.matrix( ~ batch)
+  print(system.time(zinb0 <- zinbFit(core, ncores = NCORES,
+                                     K = 0, X = mod)))
+  save(zinb0, file = fn0)
+}else{
+  load(fn0)
+}
+
+fn50 <- '../data/zinb_k50_batch.rda'
+if (runZinb & !file.exists(fn50)){
+  mod <- model.matrix( ~ batch)
+  print(system.time(zinb50 <- zinbFit(core, ncores = NCORES,
+                                      K = 50, X = mod)))
   save(zinb50, file = fn50)
 }else{
   load(fn50)
-  load(fn0)
 }
 ```
 
@@ -247,16 +249,18 @@ EAP: Fanny, we should really be using the RSEC function for all the steps of the
 FP: What about the following call to RSEC?
 
 ```{r rsec_50}
-W = colData(se)[, grepl('^W', colnames(colData(se)))]
-W = as.matrix(W)
-fn = '../data/RSEC_W.rda'
-if (runClus){
+W <- colData(se)[, grepl('^W', colnames(colData(se)))]
+W <- as.matrix(W)
+fn <- '../data/RSEC_W.rda'
+if (runClus & !file.exists(fn)){
   print(system.time(ceObj <- RSEC(t(W), k0s = 4:15, 
+                                  alphas = c(0.3), betas = c(0.9),
                                   clusterFunction = "hierarchical01",
                                   minSizes = 5,
                                   ncores = NCORES,
                                   combineProportion = 0.7,
-                                  mergeMethod = "locfdr", mergeCutoff = 0.01)))
+                                  mergeMethod = "locfdr",
+                                  mergeCutoff = 0.01)))
   save(ceObj, file = fn)
 }else{
   load(fn)
@@ -276,96 +280,171 @@ table(primaryClusterNamed(ceObj))
 sum(primaryCluster(ceObj) == -1)
 ```
 
+FP: Elizabeth, we are working with the W here, does the locfdr make sense in this context?
+
 ```{r examineMergeClusters}
 #re-does merging simpling to make plot 
-mergeClusters(ceObj, mergeMethod = "locfdr", plotInfo="mergeMethod",cutoff = 0.01)
+mergeClusters(ceObj, mergeMethod = "locfdr",
+              plotInfo = "mergeMethod", cutoff = 0.05)
 ```
 
 ```{r heatmap }
-plotHeatmap(ceObj, clusterSamplesData="dendrogramValue", breaks = .99)
+plotHeatmap(ceObj, clusterSamplesData = "dendrogramValue", 
+            breaks = .99)
 ```
 
 ```{r compareClusters}
-plot(W, col = col_clus[as.character(clus.labels)], main = 'color = previous', pch = 20)
-plot(W, col = as.factor(primaryCluster(ceObj)), main = 'color = new', pch = 20)
-table(data.frame(previous = clus.labels, new = primaryCluster(ceObj)))
+plot(fit$points, col = col_clus[as.character(clus.labels)],
+     main = 'MDS W, color = published clusters', pch = 20,
+     xlab = 'Component1', ylab = 'Component2')
 ```
 
-So, let's look at a heatmap on deviance residuals using heatmap.2 from gplots package with all the 1000 most variable genes.
-```{r, eval=FALSE}
-palDF = merged@clusterLegend[[1]]
-pal = palDF[, 'color']
-names(pal) = palDF[, 'name']
+```{r}
+palDF <- ceObj@clusterLegend[[1]]
+pal <- palDF[, 'color']
+names(pal) <- palDF[, 'name']
+plot(fit$points, col = pal[primaryClusterNamed(ceObj)],
+     main = 'MDS W, color = our clusters', pch = 20,
+     xlab = 'Component1', ylab = 'Component2')
+```
 
-plotHeatmap(res, Colv = merged@dendro_samples,
-          scale = 'none', trace = 'none', 
-          col = colorRampPalette(c('blue', 'yellow'))(51),
-          ColSideColors = pal[primaryClusterNamed(merged)],
-          labCol = '', main = 'Deviance Residuals, 1000 most variable genes')
-legend("bottom", legend = names(pal), fill = pal, title = 'Clusters',
-       horiz = T, cex = 0.5)
+```{r}
+table(data.frame(published = clus.labels,
+                 ours = primaryCluster(ceObj)))
+```
+
+So, let's look at a heatmap on normalized values.
+
+```{r}
+sampleData <- data.frame(ours = primaryCluster(ceObj))
+
+plotHeatmap(assays(se)$normalizedValues,
+            main = 'Normalized values, 1000 most variable genes',
+            clusterSamplesData = ceObj@dendro_samples,
+            sampleData = as.matrix(sampleData))
 ```
 
 
 ## Get lineages
-I used the unsupervised mode on W got from fitting zinbwave with batches in X and K = 4.
+
+The goal of this section is to see if we need to refit zinbwave when we want to run slingshot. We run slingshot in the supervised and unsupervised mode and we try k=2, k=3, k=4 in W.
+
+FP: We need to work on the cluster coloring (!) and the matching with the clusters you found for the paper with Russell, maybe by changing the parameters in clusterMany?
+
+```{r}
+Kvec <- c(2, 3, 4)
+```
+
+### Use previous W, no re-fitting 
+#### Unsupervised
+
+```{r slingshot_unsup}
+our_cl <- as.factor(primaryClusterNamed(ceObj))
+cl = our_cl[our_cl != "-1"]
+for (k in Kvec){
+  X <- W[our_cl != "-1", 1:k]
+
+  lineages <- get_lineages(X, clus.labels = cl, start.clus = "m1")
+  curves <- get_curves(X, clus.labels = cl, lineages = lineages)
+  plot_curves(X, cl, curves, col.clus = pal)
+  plot_tree(X, cl, lineages, col.clus = pal)
+
+  print(paste0("K=", k))
+  print(lineages$lineage1)
+  print(lineages$lineage2)
+  print(lineages$lineage3)
+  print(lineages$lineage4)
+}
+```
+
+#### Supervised
+
+```{r slingshot_sup}
+for (k in Kvec){
+  X <- W[our_cl != "-1", 1:k]
+
+  lineages <- get_lineages(X, clus.labels = cl, start.clus = "m1",
+                           end.clus = c("m9", "m6"))
+  curves <- get_curves(X, clus.labels = cl, lineages = lineages)
+  plot_curves(X, cl, curves, col.clus = pal)
+  plot_tree(X, cl, lineages, col.clus = pal)
+
+  print(paste0("K=", k))
+  print(lineages$lineage1)
+  print(lineages$lineage2)
+  print(lineages$lineage3)
+  print(lineages$lineage4)
+}
+```
 
 
-```{r slingshot}
-fn = '../data/zinb_k4_batch.rda'
-if (runZinb){
-  cl_labs = primaryCluster(merged)
-  batch_red = as.vector(batch)
-  batch_red = batch_red[cl_labs != -1]
-  cl_labs = cl_labs[cl_labs != -1]
-  mod = model.matrix( ~ batch_red)
-  zinb4 = zinbFit(core[,primaryCluster(merged) != -1],
-                  X = mod, K = 4, ncores = NCORES)
-  save(zinb4, file = fn)
+### Re-fitting zinbwave
+#### Unsupervised
+
+```{r refit_zinb}
+mod <- model.matrix(~ batch[our_cl != "-1"])
+fn <- '../data/refit_zinbwave_slingshot.rda'
+if (run & !file.exists(fn)){
+  zinbList <- lapply(Kvec, function(k){
+    zinbFit(core[, our_cl != "-1"], X = mod, K = k, ncores = NCORES)
+  })
+  save(zinbList, file = fn)
 }else{
-  cl_labs = primaryCluster(merged)
-  batch_red = as.vector(batch)
-  batch_red = batch_red[cl_labs != -1]
-  cl_labs = cl_labs[cl_labs != -1]
-  mod = model.matrix( ~ batch_red)
   load(fn)
 }
 ```
 
-```{r}
-X <- zinb4@W
+```{r slingshot_unsup_refit}
+for(k in Kvec) {
+  X <- getW(zinbList[[k - 1]])[, 1:k]
 
-lineages <- get_lineages(X, clus.labels = cl_labs, start.clus = 1)
-curves <- get_curves(X, clus.labels = cl_labs, lineages = lineages)
-plot_curves(X, cl_labs, curves, col.clus = unique(cl_labs))
+  lineages <- get_lineages(X, clus.labels = cl, start.clus = "m1")
+  curves <- get_curves(X, clus.labels = cl, lineages = lineages)
+  plot_curves(X, cl, curves, col.clus = pal)
+  plot_tree(X, cl, lineages, col.clus = pal)
 
-print(lineages$lineage1)
-print(lineages$lineage2)
-print(lineages$lineage3)
-print(lineages$lineage4)
+  print(paste0("K=", k))
+  print(lineages$lineage1)
+  print(lineages$lineage2)
+  print(lineages$lineage3)
+  print(lineages$lineage4)
+}
+```
+
+#### Supervised
+
+```{r slingshot_sup_refit}
+for(k in Kvec){
+  X <- getW(zinbList[[k - 1]])[, 1:k]
+
+  lineages <- get_lineages(X, clus.labels = our_cl, start.clus = "m1",
+                           end.clus = c("m9", "m6"))
+  curves <- get_curves(X, clus.labels = cl, lineages = lineages)
+  plot_curves(X, cl, curves, col.clus = pal)
+  plot_tree(X, cl, lineages, col.clus = pal)
+
+  print(paste0("K=", k))
+  print(lineages$lineage1)
+  print(lineages$lineage2)
+  print(lineages$lineage3)
+  print(lineages$lineage4)
+}
 ```
 
 ## DE analysis
 
-DE analysis using ZINB-Wave has not been implemented yet and we are still thinking about it. Would it make sense just to test the betas between clusters making the assumption that the genes are independent? Below is just a visualization of what we could have at the end of the worflow: a heatmap of the deviance residuals for DE genes between clusters.
-
+Here is the kind of plots we want to be able to have
 
 ```{r}
-de = read.csv('../data/oe_markers.txt', stringsAsFactors = F, header = F)
-de = de$V1
-
-breaks = setBreaks(res[rownames(res) %in% de, ], 0.99)
-heatmap.2(res[rownames(res) %in% de, ], breaks = breaks,
-          Colv = merged@dendro_samples,
-          scale = 'none', trace = 'none', 
-          col = colorRampPalette(c('blue', 'yellow'))(51),
-          ColSideColors = pal[primaryClusterNamed(merged)],
-          labCol = '', main = 'Deviance Residuals, DE genes (Russell)')
-legend("bottom", legend = names(pal), fill = pal, title = 'Clusters',
-       horiz = T, cex = 0.5)
+de <- read.csv('../data/oe_markers.txt', 
+              stringsAsFactors = F, header = F)
+de <- de$V1
+nv <- assays(se)$normalizedValues
+plotHeatmap(nv[rownames(nv) %in% de, ],
+            main = 'Normalized values, 1000 most variable genes',
+            clusterSamplesData = ceObj@dendro_samples,
+            sampleData = as.matrix(sampleData$ours))
 ```
-
-
 
 # Session Info
 
