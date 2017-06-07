@@ -334,12 +334,19 @@ FP: Elizabeth, I did not find how to define the column annotation track in the p
 
 EP: Fanny, you would need to use the argument 'clusterLegend'. That argument takes either the format of aheatmap (list with each element a *named* vector of colors) or the format of the clusterExperiment object (i.e. list with each element a matrix with columns for `name` and `color`). So I think the following code will run, though it might need the list to have names...
 
+But an easier fix to the code would be to set `visualizeData` option. I haven't tested this because I don't have the objects need run, so let me know if there is error.
+
 ```{r}
-sampleData <- data.frame(ours = primaryCluster(ceObj))
-plotHeatmap(assays(se)$normalizedValues,
-            main = 'Normalized values, 1000 most variable genes',
-            clusterSamplesData = ceObj@dendro_samples,
-            sampleData = as.matrix(sampleData),clusterLegend=ceObj@clusterLegend[1])
+# sampleData <- data.frame(ours = primaryCluster(ceObj))
+# plotHeatmap(assays(se)$normalizedValues,
+#             main = 'Normalized values, 1000 most variable genes',
+#             clusterSamplesData = ceObj@dendro_samples,
+#             sampleData = as.matrix(sampleData),clusterLegend=ceObj@clusterLegend[1])
+# easier fix:
+plotHeatmap(ceObj, visualizeData=assays(se)$normalizedValues,
+whichClusters="primary",
+            main = 'Normalized values, 1000 most variable genes')
+
 ```
 
 
