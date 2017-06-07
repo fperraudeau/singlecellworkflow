@@ -30,14 +30,14 @@ library(RColorBrewer)
 library(digest)
 library(rARPACK)
 set.seed(20)
-if(packageVersion("clusterExperiment")<'1.3.0.9006') stop("must have current develop version to avoid bugs")
+if(packageVersion("clusterExperiment")<'1.3.0.9008') stop("must have current develop version to avoid bugs")
 ```
 
 
 ```{r}
 runZinb <- T
 runClus <- T
-NCORES <- 10
+NCORES <- 7
 ```
 
 EAP: if we are going to ultimately use these functions, it would be good to add them to the package for zinbwave.
@@ -244,24 +244,28 @@ FP: what do you think of implemented a "compute_normalized_values" argument to z
 
 We use clusterExperiment with W.
 
-EAP: Fanny, we should really be using the RSEC function for all the steps of the clustering. I've put in the code, but I set `eval=FALSE` because I don't have the data to test it. I also am not sure that we want to set the options for `subsampleArgs` and `seqArgs` since those are suppose to be sort of esoteric concerns...
-
 FP: What about the following call to RSEC?
+
+EP: I updated it to work on a SE object so that it has the meta data. If you have a summarized experiment object with W already, you could use that as long as assay(seObj) gives W. 
+
 
 ```{r rsec_50}
 W <- colData(se)[, grepl('^W', colnames(colData(se)))]
 W <- as.matrix(W)
 fn <- '../data/RSEC_W.rda'
 if (runClus & !file.exists(fn)){
-  ceObj <- RSEC(t(W), k0s = 4:15, alphas = c(0.1), betas = 0.8,
+	metadata$clusterLabels[is.na(metadata$clusterLabels)]<- -2 #symbol for samples missing from original clustering
+  seObj<-SummarizedExperiment(t(W),colData=metadata)
+ print(system.time(  ceObj <- RSEC(seObj, k0s = 4:15, alphas = c(0.1), betas = 0.8,
                 clusterFunction = "hierarchical01", minSizes=1,
-                ncores = 7,
+                ncores = NCORES, isCount=FALSE,
                 subsampleArgs = list(resamp.num=100,
                                      clusterFunction="kmeans",
                                      clusterArgs=list(nstart=10)),
                 seqArgs = list(k.min=3, top.can=5), verbose=TRUE,
                 combineProportion = 0.7,
                 mergeMethod = "none")
+				))
   save(ceObj, file = fn)
 }else{
   load(fn)
@@ -284,9 +288,17 @@ sum(primaryCluster(ceObj) == -1)
 
 FP: Elizabeth, we are working with the W here, does the locfdr make sense in this context? I set eval=FALSE in the next chunk to skip the merging step, let me know if you would rather keep using it. And if we want to still use the merging step, would we want to include it in RSEC function arguments instead of separately?
 
+EP: I don't think the merging step on the W makes a whole lot of sense -- the method is irrelevant. The merging is based on calculating the % of genes found significant (the specific method is arbitrary). The best thing would be to replace the W with residuals in the assay of `ceObj` (or whatever data that you will do the DE on for the time stuff below), and then run the merging step on that data.  I'm not particularly fond of `locfdr`. It was probably the method that gave the best merging to Russell and Diya. You'd really have to run `mergeClusters` setting `plotInfo="all"` and look at the results and decide both the cutoff level and the method. 
+
+EP: Also, if you don't save the output of `mergeClusters` it doesn't update `ceObj`. I was calling it for just the resulting plots, since it was already merged in RSEC above. I've changed to code to update ceObj below. 
+
 ```{r examineMergeClusters,eval=FALSE}
 #re-does merging simpling to make plot 
-mergeClusters(ceObj, mergeMethod = "locfdr",
+#something like:
+#assay(ceObj)
+# if that replacement data should be considered on the transformed scale in plots, etc, the transformation function should be fixed as well:
+#transformation(ceObj)
+ceObj<-mergeClusters(ceObj, mergeMethod = "locfdr",
               plotInfo = "mergeMethod", cutoff = 0.01)
 ```
 
@@ -320,12 +332,21 @@ So, let's look at a heatmap on normalized values.
 
 FP: Elizabeth, I did not find how to define the column annotation track in the plot below to have the same colors as in ceObj@clusterLegend[[1]]. I tried to use arguments annColors and annCol from aheatmap as it is said in plotHeatmap documentation that for signature matrix arguments can be passed to aheatmap. But I got the error "The following arguments to aheatmap cannot be set by the user in plotHeatmap:Rowv,Colv,color,annCol,annColors".
 
+EP: Fanny, you would need to use the argument 'clusterLegend'. That argument takes either the format of aheatmap (list with each element a *named* vector of colors) or the format of the clusterExperiment object (i.e. list with each element a matrix with columns for `name` and `color`). So I think the following code will run, though it might need the list to have names...
+
+But an easier fix to the code would be to set `visualizeData` option. I haven't tested this because I don't have the objects need run, so let me know if there is error.
+
 ```{r}
-sampleData <- data.frame(ours = primaryCluster(ceObj))
-plotHeatmap(assays(se)$normalizedValues,
-            main = 'Normalized values, 1000 most variable genes',
-            clusterSamplesData = ceObj@dendro_samples,
-            sampleData = as.matrix(sampleData))
+# sampleData <- data.frame(ours = primaryCluster(ceObj))
+# plotHeatmap(assays(se)$normalizedValues,
+#             main = 'Normalized values, 1000 most variable genes',
+#             clusterSamplesData = ceObj@dendro_samples,
+#             sampleData = as.matrix(sampleData),clusterLegend=ceObj@clusterLegend[1])
+# easier fix:
+plotHeatmap(ceObj, visualizeData=assays(se)$normalizedValues,
+whichClusters="primary",
+            main = 'Normalized values, 1000 most variable genes')
+
 ```
 
 
@@ -353,6 +374,10 @@ From what I understand, start original cluster are 1 and 5 (HBC) and end origina
 
 
 The goal of this section is to see if we need to refit zinbwave when we want to run slingshot. We run slingshot in the supervised and unsupervised mode and we try k=3, k=4 in W.
+
+FP: We need to work on the cluster coloring (!) and the matching with the clusters you found for the paper with Russell, maybe by changing the parameters in clusterMany?
+
+EP: The function plotClusters aligns the clusters and can return the aligned coloring between clusterings. There is an option to return an updated CE object that changes the colors in clusterLegend to match the new colors found by aligning the clusters (`resetNames` and `resetColors` arguments). These haven't been extensively tested in real life because I don't think we've used them much. But it would be good to demonstrate!
 
 ```{r}
 Kvec <- c(3, 4)
