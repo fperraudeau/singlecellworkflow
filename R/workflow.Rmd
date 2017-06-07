@@ -30,7 +30,7 @@ library(RColorBrewer)
 library(digest)
 library(rARPACK)
 set.seed(20)
-if(packageVersion("clusterExperiment")<'1.3.0.9006') stop("must have current develop version to avoid bugs")
+if(packageVersion("clusterExperiment")<'1.3.0.9007') stop("must have current develop version to avoid bugs")
 ```
 
 
@@ -225,7 +225,7 @@ seObj<-SummarizedExperiment(t(W),colData=metadata)
 if(runClus) {
  print(system.time(ceObj <- RSEC(seObj, k0s = 4:15, alphas = c(0.1), betas = 0.8,
                       clusterFunction = "hierarchical01", minSizes=1,
-                      ncores = NCORES,
+                      ncores = NCORES, isCount=FALSE,
 					  combineProportion = 0.7,mergeMethod = "locfdr", mergeCutoff = 0.01
                       subsampleArgs = list(resamp.num=100,
                                            clusterFunction="kmeans",
