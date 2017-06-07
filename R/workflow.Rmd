@@ -253,22 +253,24 @@ W <- colData(se)[, grepl('^W', colnames(colData(se)))]
 W <- as.matrix(W)
 fn <- '../data/RSEC_W.rda'
 if (runClus & !file.exists(fn)){
-  print(system.time(ceObj <- RSEC(t(W), k0s = 4:15, 
-                                  alphas = c(0.3), betas = c(0.9),
-                                  clusterFunction = "hierarchical01",
-                                  minSizes = 5,
-                                  ncores = NCORES,
-                                  combineProportion = 0.7,
-                                  mergeMethod = "locfdr",
-                                  mergeCutoff = 0.01)))
+  ceObj <- RSEC(t(W), k0s = 4:15, alphas = c(0.1), betas = 0.8,
+                clusterFunction = "hierarchical01", minSizes=1,
+                ncores = 7,
+                subsampleArgs = list(resamp.num=100,
+                                     clusterFunction="kmeans",
+                                     clusterArgs=list(nstart=10)),
+                seqArgs = list(k.min=3, top.can=5), verbose=TRUE,
+                combineProportion = 0.7,
+                mergeMethod = "none")
   save(ceObj, file = fn)
 }else{
   load(fn)
 }
 ```
 
+
 ```{r examineCombineMany}
-plotClusters(ceObj, colPalette = c(bigPalette, rainbow(100)))
+plotClusters(ceObj, colPalette = c(bigPalette, rainbow(200)))
 ```
 
 ```{r plotcoclust}
@@ -280,12 +282,12 @@ table(primaryClusterNamed(ceObj))
 sum(primaryCluster(ceObj) == -1)
 ```
 
-FP: Elizabeth, we are working with the W here, does the locfdr make sense in this context?
+FP: Elizabeth, we are working with the W here, does the locfdr make sense in this context? I set eval=FALSE in the next chunk to skip the merging step, let me know if you would rather keep using it. And if we want to still use the merging step, would we want to include it in RSEC function arguments instead of separately?
 
-```{r examineMergeClusters}
+```{r examineMergeClusters,eval=FALSE}
 #re-does merging simpling to make plot 
 mergeClusters(ceObj, mergeMethod = "locfdr",
-              plotInfo = "mergeMethod", cutoff = 0.05)
+              plotInfo = "mergeMethod", cutoff = 0.01)
 ```
 
 ```{r heatmap }
@@ -297,6 +299,8 @@ plotHeatmap(ceObj, clusterSamplesData = "dendrogramValue",
 plot(fit$points, col = col_clus[as.character(clus.labels)],
      main = 'MDS W, color = published clusters', pch = 20,
      xlab = 'Component1', ylab = 'Component2')
+legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
+       fill = unique(col_clus), title = 'Sample')
 ```
 
 ```{r}
@@ -304,20 +308,20 @@ palDF <- ceObj@clusterLegend[[1]]
 pal <- palDF[, 'color']
 names(pal) <- palDF[, 'name']
 plot(fit$points, col = pal[primaryClusterNamed(ceObj)],
-     main = 'MDS W, color = our clusters', pch = 20,
+     main = 'MDS W, color = our new clusters', pch = 20,
      xlab = 'Component1', ylab = 'Component2')
+legend(x = 'bottomright', legend = names(pal), cex = .5,
+       fill = pal, title = 'Sample')
 ```
 
-```{r}
-table(data.frame(published = clus.labels,
-                 ours = primaryCluster(ceObj)))
-```
+
 
 So, let's look at a heatmap on normalized values.
 
+FP: Elizabeth, I did not find how to define the column annotation track in the plot below to have the same colors as in ceObj@clusterLegend[[1]]. I tried to use arguments annColors and annCol from aheatmap as it is said in plotHeatmap documentation that for signature matrix arguments can be passed to aheatmap. But I got the error "The following arguments to aheatmap cannot be set by the user in plotHeatmap:Rowv,Colv,color,annCol,annColors".
+
 ```{r}
 sampleData <- data.frame(ours = primaryCluster(ceObj))
-
 plotHeatmap(assays(se)$normalizedValues,
             main = 'Normalized values, 1000 most variable genes',
             clusterSamplesData = ceObj@dendro_samples,
@@ -327,12 +331,32 @@ plotHeatmap(assays(se)$normalizedValues,
 
 ## Get lineages
 
-The goal of this section is to see if we need to refit zinbwave when we want to run slingshot. We run slingshot in the supervised and unsupervised mode and we try k=2, k=3, k=4 in W.
+```{r}
+table(data.frame(published = clus.labels,
+                 ours = primaryClusterNamed(ceObj)))
+```
+
+Cluster name | Description | Correspondence
+-------------|-------------|-----------------
+m1 | resting HBC | original 1, 5
+m2 | activated HBC | original 5
+m3 | GBC / immature neurons / MV 1 | original 2, 3, 11
+m4 | Sus | original 4, 7
+m5 | new | new
+m6 | new | new
+m7 | Neuron | original 9, 12
+m8 | Immature Neuron | original 10, 14
+m9 | Microvillus | original 15
+m10 | Immature Neuron | original 14
+
+
+
+The goal of this section is to see if we need to refit zinbwave when we want to run slingshot. We run slingshot in the supervised and unsupervised mode and we try k=3, k=4 in W.
 
 FP: We need to work on the cluster coloring (!) and the matching with the clusters you found for the paper with Russell, maybe by changing the parameters in clusterMany?
 
 ```{r}
-Kvec <- c(2, 3, 4)
+Kvec <- c(3, 4)
 ```
 
 ### Use previous W, no re-fitting 
@@ -359,12 +383,18 @@ for (k in Kvec){
 
 #### Supervised
 
+
 ```{r slingshot_sup}
+# m11 - original 15 - Microvillus
+# m7, m8 - original 9, 12 - Neuron
+# m4 - original 4, 7 - Sus
+
+
 for (k in Kvec){
   X <- W[our_cl != "-1", 1:k]
 
   lineages <- get_lineages(X, clus.labels = cl, start.clus = "m1",
-                           end.clus = c("m8", "m4"))
+                           end.clus = c("m11", "m7", "m8", "m4"))
   curves <- get_curves(X, clus.labels = cl, lineages = lineages)
   plot_curves(X, cl, curves, col.clus = pal)
   plot_tree(X, cl, lineages, col.clus = pal)
@@ -418,7 +448,7 @@ for(k in Kvec){
   X <- getW(zinbList[[k - 1]])[, 1:k]
 
   lineages <- get_lineages(X, clus.labels = cl, start.clus = "m1",
-                           end.clus = c("m8", "m4"))
+                           end.clus = c("m11", "m4"))
   curves <- get_curves(X, clus.labels = cl, lineages = lineages)
   plot_curves(X, cl, curves, col.clus = pal)
   plot_tree(X, cl, lineages, col.clus = pal)
