@@ -295,9 +295,9 @@ EP: Also, if you don't save the output of `mergeClusters` it doesn't update `ceO
 ```{r examineMergeClusters,eval=FALSE}
 #re-does merging simpling to make plot 
 #something like:
-#assay(ceObj)<- ...
+#assay(ceObj)
 # if that replacement data should be considered on the transformed scale in plots, etc, the transformation function should be fixed as well:
-#transformation(ceObj)<- ...
+#transformation(ceObj)
 ceObj<-mergeClusters(ceObj, mergeMethod = "locfdr",
               plotInfo = "mergeMethod", cutoff = 0.01)
 ```
@@ -370,6 +370,7 @@ m8 | Immature Neuron | original 10, 14
 m9 | Microvillus | original 15
 m10 | Immature Neuron | original 14
 
+From what I understand, start original cluster are 1 and 5 (HBC) and end original clusters are 15 (Microvillus), 9 and 12 (neuron), and 4, 7 (Sus).
 
 
 The goal of this section is to see if we need to refit zinbwave when we want to run slingshot. We run slingshot in the supervised and unsupervised mode and we try k=3, k=4 in W.
