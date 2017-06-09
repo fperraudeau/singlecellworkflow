@@ -309,7 +309,9 @@ ceObj<-mergeClusters(ceObj, mergeMethod = "locfdr",
 
 FP: Not sure we should show the following heatmap using the W, we should rather use the normalized values (following heatmap). 
 
-```{r heatmap }
+EP: Agreed
+
+```{r heatmap, eval=FALSE}
 plotHeatmap(ceObj, clusterSamplesData = "dendrogramValue", 
             breaks = .99)
 ```
@@ -325,6 +327,8 @@ But an easier fix to the code would be to set `visualizeData` option. I haven't 
 
 FP: it seems great to me, what do you think?
 
+EP: We should be careful, because the default in plotHeatmap is to plot the 500 most variable genes (maybe a slightly paternalistic default). I've changed it to `all` in the code here. I've also added the plotting of the batch, experiment, and Russell's original clusters. We may not want to keep all of them, but probably at least Russell's clusters for comparison.
+
 ```{r}
 # sampleData <- data.frame(ours = primaryCluster(ceObj))
 # plotHeatmap(assays(se)$normalizedValues,
@@ -332,9 +336,15 @@ FP: it seems great to me, what do you think?
 #             clusterSamplesData = ceObj@dendro_samples,
 #             sampleData = as.matrix(sampleData),clusterLegend=ceObj@clusterLegend[1])
 # easier fix:
+origClusterColors<-bigPalette[1:nlevels(colData(ceObj)$clusterLabels)]
+experimentColors<-bigPalette[1:nlevels(colData(ceObj)$Experiment)]
+batchColors<-bigPalette[1:nlevels(colData(ceObj)$Batch)]
+metaColors<-list("Experiment"=experimentColors,"Batch"=batchColors,"clusterLabels"=origClusterColors)
+
 plotHeatmap(ceObj, visualizeData = assays(se)$normalizedValues,
-            whichClusters = "primary",
+            whichClusters = "primary",clusterFeaturesData="all",
             clusterSamplesData = "dendrogramValue",
+			sampleData=c("clusterLabels","Batch","Experiment"), clusterLegend=metaColors, annLegend=FALSE,
             main = 'Normalized values, 1000 most variable genes',
             breaks = 0.99)
 
