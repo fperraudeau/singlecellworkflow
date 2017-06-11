@@ -164,7 +164,7 @@ if (runZinb & !file.exists(fn)){
 We use deviance residuals as normalized values for visualization. FP: explain rational: K=0 so residuals capture the bio adjusting for batch. Let's check that deviance residuals look ok.
 
 ```{r}
-res <- computeDevianceResiduals(zinb, core)
+res <- assays(zinb)[['normalizedValues']]
 res[1:3,1:3]
 ```
 
@@ -189,18 +189,13 @@ plot(pca$x, col = col_clus[as.character(clus.labels)], pch = 20,
 par(mfrow = c(1,1))
 ```
 
-Let's add the normalized values as an assay dataset in our SummarizedExperiment object.
-
-```{r}
-assays(se)[['normalizedValues']] <- res
-```
-
 ### Dimensionality reduction
 
 Let's check that performing MDS on W we have something coherent with original clusters.
 
 ```{r}
-W <- getW(zinb50)
+W <- colData(se)[, grepl('^W', colnames(colData(se)))]
+W <- as.matrix(W)
 d <- dist(W)
 fit <- cmdscale(d, eig = TRUE, k = 2)
 plot(fit$points, col = col_clus[as.character(clus.labels)], main = 'MDS', pch = 20,
@@ -209,29 +204,15 @@ legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
        fill = unique(col_clus), title = 'Sample')
 ```
 
-Let's add W to the colData of our SummarizedExperiment object.
-
-```{r}
-W <- data.frame(W)
-colnames(W) <- paste0('W', 1:ncol(W))
-colData(se) <- cbind(colData(se), W)
-```
-
-
-FP: what do you think of implemented a "compute_normalized_values" argument to zinbFit for summarizedExperiment objects where zinbFit would take as input a SummarizedExperiment object and return a summarizedExperiment object with slots added for normalized values and W?
 
 ## 2. Clustering of the cells
 
 We use clusterExperiment with W.
 
-FP: What about the following call to RSEC?
-
 EP: I updated it to work on a SE object so that it has the meta data. If you have a summarized experiment object with W already, you could use that as long as assay(seObj) gives W. 
 
 
 ```{r rsec_50}
-W <- colData(se)[, grepl('^W', colnames(colData(se)))]
-W <- as.matrix(W)
 fn <- '../data/RSEC_W.rda'
 if (runClus & !file.exists(fn)){
   #symbol for samples missing from original clustering
@@ -283,15 +264,6 @@ FP: Ha ok, good to know. I'll keep the eval=FALSE for the moment.
 #transformation(ceObj)
 ceObj<-mergeClusters(ceObj, mergeMethod = "locfdr",
               plotInfo = "mergeMethod", cutoff = 0.01)
-```
-
-FP: Not sure we should show the following heatmap using the W, we should rather use the normalized values (following heatmap). 
-
-EP: Agreed
-
-```{r heatmap, eval=FALSE}
-plotHeatmap(ceObj, clusterSamplesData = "dendrogramValue", 
-            breaks = .99)
 ```
 
 
@@ -347,8 +319,6 @@ plot(fit$points, col = pal[primaryClusterNamed(ceObj)],
 legend(x = 'bottomright', legend = names(pal), cex = .5,
        fill = pal, title = 'Sample')
 ```
-
-
 
 
 ## 4. Pseudotime ordering
