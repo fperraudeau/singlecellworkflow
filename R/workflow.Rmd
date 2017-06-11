@@ -30,8 +30,20 @@ library(RColorBrewer)
 library(digest)
 library(rARPACK)
 set.seed(20)
-if(packageVersion("clusterExperiment")<'1.3.0.9009') stop("must have current develop version to avoid bugs")
+if(packageVersion("clusterExperiment")<'1.3.0.9008') stop("must have current develop version to avoid bugs")
+if(packageVersion("zinbwave")<'0.99.4.1') stop("must have current develop version to avoid bugs")
 ```
+
+FP: Elizabeth, I could not install the last version 1.3.0.9009 of clusterExperiment. The error is
+
+checking DESCRIPTION meta-information ... ERROR
+Malformed Depends or Suggests or Imports or Enhances field.
+Offending entries:
+  MAST
+BiocStyle
+Entries must be names of packages optionally followed by '<=' or '>=',
+white space, and a valid version number in parentheses.
+
 
 ```{r}
 runZinb <- T
@@ -40,30 +52,6 @@ NCORES <- 7
 ```
 
 EAP: small request. Can everyone put a line between the beginning of a r chunk and text? It makes it nicely formated for my text editor. 
-
-EAP: if we are going to ultimately use these functions, it would be good to add them to the package for zinbwave.
-
-FP: yes, I agree. Davide, we wait for zinbwave to be on bioconductor before to push changes, right?
-
-```{r residuals}
-compute.zinb.loglik <- function(Y, zinb){
-  mu = t(getMu(zinb)) 
-  theta = getTheta(zinb)
-  theta_mat = matrix(rep(theta, ncol(Y), ncol = ncol(Y)))
-  pi = t(getPi(zinb))
-  log( pi * (Y == 0) + (1 - pi) * dnbinom(Y, size = theta, mu = mu) )
-}
-
-compute.deviance.residuals <- function(Y, zinb){
-  mu_hat = t(getMu(zinb)) 
-  pi_hat = t(getPi(zinb)) 
-  Y_hat = (1 - pi_hat) * mu_hat
-  ll = compute.zinb.loglik(Y, zinb)
-  sign = 1*(Y - Y_hat > 0)
-  sign[sign == 0] = -1
-  sign * sqrt(-2 * ll)
-}
-```
 
 # Steps of the workflow
 
@@ -160,24 +148,14 @@ se <- SummarizedExperiment(assays = list(rawCounts = core),
 To cluster and get lineages we want to reduce the dimension of the data. We are going to use zinbwave to do so. First, let's fit zinbwave with first K = 0 to compute normalized values (i.e. deviance residuals) adjusted for batches. We could also adjust for gene length or GC content here. We then fit zinbwave to get the dimensionality reduced matrix W specifying the number of dimension K = 50. Eventually, we will call zinbwave just once where we would have an argument in zinbFit like "compute_normalized_values" in c(TRUE, FALSE). For K = 0 and K = 50, we correct for batch effect including batches in X.
 
 ```{r}
-fn0 <- '../data/zinb_k0_batch.rda'
-if (runZinb & !file.exists(fn0)){
+fn <- '../data/zinb_batch.rda'
+if (runZinb & !file.exists(fn)){
   mod <- model.matrix( ~ batch)
-  print(system.time(zinb0 <- zinbFit(core, ncores = NCORES,
-                                     K = 0, X = mod)))
-  save(zinb0, file = fn0)
+  print(system.time(zinb <- zinbDimRed(se, K = 50, X = mod, residuals = T,
+                                       normalizedValues = T)))
+  save(zinb, file = fn)
 }else{
-  load(fn0)
-}
-
-fn50 <- '../data/zinb_k50_batch.rda'
-if (runZinb & !file.exists(fn50)){
-  mod <- model.matrix( ~ batch)
-  print(system.time(zinb50 <- zinbFit(core, ncores = NCORES,
-                                      K = 50, X = mod)))
-  save(zinb50, file = fn50)
-}else{
-  load(fn50)
+  load(fn)
 }
 ```
 
@@ -186,7 +164,7 @@ if (runZinb & !file.exists(fn50)){
 We use deviance residuals as normalized values for visualization. FP: explain rational: K=0 so residuals capture the bio adjusting for batch. Let's check that deviance residuals look ok.
 
 ```{r}
-res <- compute.deviance.residuals(core, zinb0)
+res <- computeDevianceResiduals(zinb, core)
 res[1:3,1:3]
 ```
 
