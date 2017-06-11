@@ -152,7 +152,8 @@ fn <- '../data/zinb_batch.rda'
 if (runZinb & !file.exists(fn)){
   mod <- model.matrix( ~ batch)
   print(system.time(zinb <- zinbDimRed(se, K = 50, X = mod, residuals = T,
-                                       normalizedValues = T)))
+                                       normalizedValues = T,
+                                       BPPARAM = MulticoreParam(NCORES))))
   save(zinb, file = fn)
 }else{
   load(fn)
