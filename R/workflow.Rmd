@@ -37,8 +37,8 @@ if(packageVersion("zinbwave")<'0.99.4.2') stop("must have current develop versio
 ```
 
 ```{r}
-runZinb <- T
-runClus <- T
+runZinb <- TRUE
+runClus <- TRUE
 NCORES <- 7
 ```
 
@@ -47,7 +47,7 @@ FP: Version of zinbwave to use is last version of branch normvalues (branched fr
 ```{r parallel}
 mysystem = Sys.info()[['sysname']]
 switch(mysystem,
-       Windows = {print("I'm a Windows PC and you should choose the parallel computing you want.")},
+       Windows = {print("I'm a Windows PC and I'll use the snow for parallel computing (warning: it might be slower than serial computations).")},
        Linux = {print("I'm a penguin and I'll use package MulticoreParam for parallel computing.")},
        Darwin = {print("I'm a Mac and I'll use package doParallel for parallel computing.")})
 
@@ -88,20 +88,20 @@ EAP: I have updated the code to pull from a dataset on the repos that is created
 
 EAP: zinbFit doesn't accept data.frame objects, so currently have to have a `data.matrix` command. Should it be changed so that it does?
 
+DR: I have changed the `createData.R` file so that it uses scone to filter out low-quality samples.
+
 ```{r datain}
-#counts<-read.table("../data/oeCufflinkCountData.txt",sep="\t",header=TRUE)
-core <- read.table("../data/oeCufflinkCountData_1000Var.txt",
-                   sep = "\t", header = TRUE)
-core <- data.matrix(core)
-metadata <- read.table("../data/oeMetadata.txt", sep = "\t", header = TRUE)
-# symbol for samples missing from original clustering
-metadata$clusterLabels[is.na(metadata$clusterLabels)] <- -2
+if(!file.exists("../data/oe_se_1000Var.rda")) {
+  source("createData.R")
+}
+
+load("../data/oe_se_1000Var.rda")
 ```
 
 Here we only look at the 1000 most variable genes. EAP: see note above, I've commented out the filtering and added it to the `createData.R` for now. 
 
 ```{r batches}
-batch <- metadata$Batch
+batch <- colData(core)$Batch
 ```
 
 Cells have been processed in `r length(unique(batch))` different batches
@@ -115,12 +115,12 @@ table(batch)
 We have qc measures from the data
 
 ```{r qc}
-qc <- metadata[, !names(metadata) %in% c("Batch", "Experiment", "clusterLabels")]
+qc <- colData(core)[, !names(colData(core)) %in% c("Batch", "Experiment", "clusterLabels")]
 head(qc, 2)
 ```
 
 ```{r clusterlabels}
-clus.labels <- metadata[, "clusterLabels"]
+clus.labels <- colData(core)[, "clusterLabels"]
 ```
 
 In original work (FP: add ref), cells have been clustered into `r length(unique(clus.labels))` different clusters
@@ -143,14 +143,7 @@ We have `r ncol(core)` cells.
 
 ```{r lookatdata}
 dim(core)
-core[1:3, 1:3]
-```
-
-Let's create a SummarizedExperiment object to store the raw counts and information about the data, that is batches, original labels, and quality control measures.
-
-```{r se}
-se <- SummarizedExperiment(assays = list(rawCounts = core),
-                           colData = metadata)
+assay(core)[1:3, 1:3]
 ```
 
 
@@ -161,14 +154,16 @@ To cluster and get lineages we want to reduce the dimension of the data. We are 
 ```{r zinb}
 fn <- '../data/zinb_batch.rda'
 if (runZinb & !file.exists(fn)){
-  print(system.time(se <- zinbDimRed(se, K = 50, X = '~ Batch',
-                                       residuals = T,
-                                       normalizedValues = T)))
+  print(system.time(se <- zinbDimRed(core, K = 50, X = '~ Batch',
+                                       residuals = TRUE,
+                                       normalizedValues = TRUE)))
   save(se, file = fn)
 }else{
   load(fn)
 }
 ```
+
+DR: the chunk above and the similar one for clusterExperiment are fine for now, but in the published workflow, we should just rely on the markdown cache system (the code above doesn't check for changes to the file or code -- just that a version of the file exists).
 
 ### Normalized values
 
@@ -235,8 +230,7 @@ EP: I updated it to work on a SE object so that it has the meta data. If you hav
 fn <- '../data/RSEC_W.rda'
 if (runClus & !file.exists(fn)){
   #symbol for samples missing from original clustering
-	metadata$clusterLabels[is.na(metadata$clusterLabels)] <- -2 
-  seObj <- SummarizedExperiment(t(W), colData = metadata)
+  seObj <- SummarizedExperiment(t(W), colData = colData(core))
   print(system.time(ceObj <- RSEC(seObj, k0s = 4:15, alphas = c(0.1),
                                   betas = 0.8,
                 clusterFunction = "hierarchical01", minSizes=1,
@@ -440,8 +434,9 @@ K = 4 good even if GBC not really at the junction.
 
 K = 5 not great GBC is an end cluster.
 
-```{r refit_zinb}
+```{r refit_zinb, eval=FALSE}
 fn <- '../data/refit_zinbwave_slingshot.rda'
+
 if (runZinb & !file.exists(fn)){
   zinbList <- lapply(Kvec, function(k){
     zinbFit(se[, our_cl != "-1"], X = '~ Batch', K = k)
@@ -452,7 +447,7 @@ if (runZinb & !file.exists(fn)){
 }
 ```
 
-```{r slingshot_unsup_refit}
+```{r slingshot_unsup_refit, eval=FALSE}
 for(k in Kvec) {
   X <- getW(zinbList[[k - 2]])[, 1:k]
 
@@ -478,7 +473,7 @@ K = 4 good even if GBC not really at the junction.
 
 K = 5 no, GBC is an end cluster.
 
-```{r slingshot_sup_refit}
+```{r slingshot_sup_refit, eval=FALSE}
 for(k in Kvec){
   X <- getW(zinbList[[k - 2]])[, 1:k]
 
@@ -505,7 +500,7 @@ It seems to me that using slingshot on W without re-fitting zinbwave with k = 4 
 
 Here is the kind of plots we want to present
 
-```{r de}
+```{r de, eval = FALSE}
 de <- read.csv('../data/oe_markers.txt', stringsAsFactors = F, header = F)
 de <- de$V1
 plotHeatmap(ceObj, 

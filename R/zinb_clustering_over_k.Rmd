@@ -182,6 +182,8 @@ merged <- mergeClusters(combined, mergeMethod = "locfdr", cutoff = 0.01)
 
 # 
 # plot(getW(zinb50), pch=19, col=pal[as.factor(primaryCluster(merged))])
+
+plotCoClustering(combined)
 ```
 
 # Slingshot
