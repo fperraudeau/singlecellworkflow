@@ -17,10 +17,12 @@ knitr::opts_chunk$set(fig.align="center", cache=TRUE, error=FALSE, message=FALSE
 library(scRNAseq)
 library(scone)
 library(clusterExperiment)
+library(BiocParallel)
 #github
 library(zinbwave)
 library(slingshot)
 #CRAN
+library(doParallel)
 library(ggplot2)
 library(gplots)
 library(magrittr)
@@ -31,7 +33,33 @@ library(digest)
 library(rARPACK)
 set.seed(20)
 if(packageVersion("clusterExperiment")<'1.3.0.9008') stop("must have current develop version to avoid bugs")
-if(packageVersion("zinbwave")<'0.99.4.1') stop("must have current develop version to avoid bugs")
+if(packageVersion("zinbwave")<'0.99.4.2') stop("must have current develop version to avoid bugs")
+```
+
+```{r}
+runZinb <- T
+runClus <- T
+NCORES <- 7
+```
+
+FP: for zinbwave, parallel computing is now handle by BiocParallel. If you have a Windows machine, please update the code to allow paralell computing.
+
+```{r parallel}
+mysystem = Sys.info()[['sysname']]
+switch(mysystem,
+       Windows = {print("I'm a Windows PC and you should choose the parallel computing you want.")},
+       Linux = {print("I'm a penguin and I'll use package MulticoreParam for parallel computing.")},
+       Darwin = {print("I'm a Mac and I'll use package doParallel for parallel computing.")})
+
+if (mysystem == 'Darwin'){
+  registerDoParallel(NCORES)
+  register(DoparParam())
+}else if (mysystem == 'Linux'){
+  register(bpstart(MulticoreParam(workers=NCORES)))
+}else{
+  print('Please change this to allow parallel computing')
+  register(SerialParam())
+}
 ```
 
 FP: Elizabeth, I could not install the last version 1.3.0.9009 of clusterExperiment. The error is
@@ -43,13 +71,6 @@ Offending entries:
 BiocStyle
 Entries must be names of packages optionally followed by '<=' or '>=',
 white space, and a valid version number in parentheses.
-
-
-```{r}
-runZinb <- T
-runClus <- T
-NCORES <- 7
-```
 
 EAP: small request. Can everyone put a line between the beginning of a r chunk and text? It makes it nicely formated for my text editor. 
 
@@ -95,7 +116,7 @@ batch <- metadata$Batch
 
 Cells have been processed in `r length(unique(batch))` different batches
 
-```{r}
+```{r batch}
 col_batch = rep(brewer.pal(9, "Set1"), 2)
 names(col_batch) = unique(batch)
 table(batch)
@@ -114,7 +135,7 @@ clus.labels <- metadata[, "clusterLabels"]
 
 In original work (FP: add ref), cells have been clustered into `r length(unique(clus.labels))` different clusters
 
-```{r}
+```{r original}
 col_clus <- c("transparent", brewer.pal(12, "Set3"), brewer.pal(8, "Set2"))
 col_clus <- col_clus[1:length(unique(clus.labels))]
 names(col_clus) <- sort(unique(clus.labels))
@@ -123,7 +144,7 @@ table(clus.labels)
 
 Batches are kind of confounded with the biology
 
-```{r}
+```{r clustbatch}
 table(data.frame(batch = as.vector(batch),
                  cluster = clus.labels))
 ```
@@ -137,7 +158,7 @@ core[1:3, 1:3]
 
 Let's create a SummarizedExperiment object to store the raw counts and information about the data, that is batches, original labels, and quality control measures.
 
-```{r}
+```{r se}
 se <- SummarizedExperiment(assays = list(rawCounts = core),
                            colData = metadata)
 ```
@@ -147,13 +168,12 @@ se <- SummarizedExperiment(assays = list(rawCounts = core),
 
 To cluster and get lineages we want to reduce the dimension of the data. We are going to use zinbwave to do so. First, let's fit zinbwave with first K = 0 to compute normalized values (i.e. deviance residuals) adjusted for batches. We could also adjust for gene length or GC content here. We then fit zinbwave to get the dimensionality reduced matrix W specifying the number of dimension K = 50. Eventually, we will call zinbwave just once where we would have an argument in zinbFit like "compute_normalized_values" in c(TRUE, FALSE). For K = 0 and K = 50, we correct for batch effect including batches in X.
 
-```{r}
+```{r zinb}
 fn <- '../data/zinb_batch.rda'
 if (runZinb & !file.exists(fn)){
-  mod <- model.matrix( ~ batch)
-  print(system.time(zinb <- zinbDimRed(se, K = 50, X = mod, residuals = T,
-                                       normalizedValues = T,
-                                       BPPARAM = MulticoreParam(NCORES))))
+  print(system.time(zinb <- zinbDimRed(se, K = 50, X = '~ batch',
+                                       residuals = T,
+                                       normalizedValues = T)))
   save(zinb, file = fn)
 }else{
   load(fn)
@@ -164,14 +184,14 @@ if (runZinb & !file.exists(fn)){
 
 We use deviance residuals as normalized values for visualization. FP: explain rational: K=0 so residuals capture the bio adjusting for batch. Let's check that deviance residuals look ok.
 
-```{r}
+```{r norm}
 res <- assays(zinb)[['normalizedValues']]
 res[1:3,1:3]
 ```
 
 Boxplot of the normalized values for each cell. It seems that correction for batches is ok.
 
-```{r}
+```{r lookatnorm}
 res_order <- res[, order(as.numeric(batch))]
 col_order <- as.numeric(batch)[order(as.numeric(batch))]
 boxplot(res_order, main='Boxplot of normalized values\ncolor=batch',
@@ -180,7 +200,7 @@ boxplot(res_order, main='Boxplot of normalized values\ncolor=batch',
 
 PCA on the normalized values where color are for batches on the left and previously found clusters on the right. We want no clustering on the left side and clustering on the right side.
 
-```{r}
+```{r pcanorm}
 pca <- prcomp(t(res))
 par(mfrow = c(1,2))
 plot(pca$x, col = col_batch[batch], pch = 20,
@@ -194,7 +214,7 @@ par(mfrow = c(1,1))
 
 Let's check that performing MDS on W we have something coherent with original clusters.
 
-```{r}
+```{r lookatdimred}
 W <- colData(se)[, grepl('^W', colnames(colData(se)))]
 W <- as.matrix(W)
 d <- dist(W)
@@ -244,7 +264,7 @@ plotClusters(ceObj, colPalette = c(bigPalette, rainbow(199)))
 plotCoClustering(ceObj)
 ```
 
-```{r}
+```{r tableclust}
 table(primaryClusterNamed(ceObj))
 sum(primaryCluster(ceObj) == -1)
 ```
@@ -280,7 +300,7 @@ FP: it seems great to me, what do you think?
 
 EP: We should be careful, because the default in plotHeatmap is to plot the 500 most variable genes (maybe a slightly paternalistic default). I've changed it to `all` in the code here. I've also added the plotting of the batch, experiment, and Russell's original clusters. We may not want to keep all of them, but probably at least Russell's clusters for comparison.
 
-```{r}
+```{r heatmaps}
 # sampleData <- data.frame(ours = primaryCluster(ceObj))
 # plotHeatmap(assays(se)$normalizedValues,
 #             main = 'Normalized values, 1000 most variable genes',
@@ -309,7 +329,7 @@ legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
        fill = unique(col_clus), title = 'Sample')
 ```
 
-```{r}
+```{r compare}
 palDF <- ceObj@clusterLegend[[1]]
 pal <- palDF[, 'color']
 names(pal) <- palDF[, 'name']
@@ -328,7 +348,7 @@ The goal of this section is to see if we need to refit zinbwave when we want to 
 
 From what I understand, start original clusters are 1 and 5 (HBC) and end original clusters are 15 (Microvillus), 9 and 12 (neuron), and 4, 7 (Sus). Additionally, we want the GBC cluster to be a junction before the differentiation between Microvillus and Neuron. The correspondance with the original clusters is as follow
 
-```{r}
+```{r tabagain}
 table(data.frame(original = clus.labels, ours = primaryClusterNamed(ceObj)))
 ```
 
@@ -351,7 +371,7 @@ EP: The function plotClusters aligns the clusters and can return the aligned col
 
 FP: With all the improvements made, I think we simply have the correct colors now.
 
-```{r}
+```{r kvec}
 Kvec <- c(3, 4, 5)
 ```
 
@@ -368,13 +388,13 @@ K = 4 is better, slingshot finds the end clusters but there is a spurious end cl
 K = 5 does not seem great to me: GBC is an end cluster and Sus and Microvillus are in the same lineage.
 
 
-```{r slingshot_unsup}
+```{r removeunassigned}
 our_cl <- primaryClusterNamed(ceObj)
 cl = our_cl[our_cl != "-1"]
 pal = pal[names(pal) != '-1']
 ```
 
-```{r}
+```{r slingshot_unsup}
 for (k in Kvec){
   X <- W[our_cl != "-1", 1:k]
 
@@ -495,7 +515,7 @@ It seems to me that using slingshot on W without re-fitting zinbwave with k = 4 
 
 Here is the kind of plots we want to present
 
-```{r}
+```{r de}
 de <- read.csv('../data/oe_markers.txt', stringsAsFactors = F, header = F)
 de <- de$V1
 plotHeatmap(ceObj, 
