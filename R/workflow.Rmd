@@ -232,7 +232,7 @@ if (runClus & !file.exists(fn)){
   #symbol for samples missing from original clustering
   seObj <- SummarizedExperiment(t(W), colData = colData(core))
   print(system.time(ceObj <- RSEC(seObj, k0s = 4:15, alphas = c(0.1),
-                                  betas = 0.8,
+                                  betas = 0.8, dimReduce="none",
                 clusterFunction = "hierarchical01", minSizes=1,
                 ncores = NCORES, isCount=FALSE,
                 subsampleArgs = list(resamp.num=100,
@@ -240,7 +240,7 @@ if (runClus & !file.exists(fn)){
                                      clusterArgs=list(nstart=10)),
                 seqArgs = list(k.min=3, top.can=5), verbose=TRUE,
                 combineProportion = 0.7,
-                mergeMethod = "none")))
+                mergeMethod = "none", random.seed=424242)))
   save(ceObj, file = fn)
 }else{
   load(fn)
@@ -299,6 +299,7 @@ EP: We should be careful, because the default in plotHeatmap is to plot the 500 
 #             clusterSamplesData = ceObj@dendro_samples,
 #             sampleData = as.matrix(sampleData),clusterLegend=ceObj@clusterLegend[1])
 # easier fix:
+colData(ceObj)$clusterLabels <- as.factor(colData(ceObj)$clusterLabels)
 origClusterColors<-bigPalette[1:nlevels(colData(ceObj)$clusterLabels)]
 experimentColors<-bigPalette[1:nlevels(colData(ceObj)$Experiment)]
 batchColors<-bigPalette[1:nlevels(colData(ceObj)$Batch)]
@@ -344,17 +345,15 @@ From what I understand, start original clusters are 1 and 5 (HBC) and end origin
 table(data.frame(original = clus.labels, ours = primaryClusterNamed(ceObj)))
 ```
 
-Cluster name | Description | Correspondence
--------------|-------------|-----------------
-c1 | HBC | original 1, 5
-c2 | new and small | new and small
-c3 | new and small | new and small
-c4 | GBC / immature neurons / MV 1 | original 2, 3, 11, 14
-c5 | Sus | original 4, 7
-c6 | Neuron | original 9, 12
-c7 | Immature Neuron | original 10, 14
-c8 | Immature Neuron | original 14
-c9 | Microvillus | original 15
+Cluster name | Description | Color | Correspondence
+-------------|-------------|-------| ----------
+c1 | HBC | blue | original 1, 5
+c2 | GBC / immature neurons / MV 1 | green | original 2, 3, 11
+c3 | Sus | red | original 4, 7
+c4 | Neuron | orange | original 9, 12
+c5 | Immature Neuron | purple | original 10, 14
+c6 | new and small | brown | original 9
+c7 | Microvillus | cyan | original 15
 
 ```{r kvec}
 Kvec <- c(3, 4, 5)
@@ -366,11 +365,11 @@ The input of slingshot is the W used for clusterExperiment where the number of d
 
 #### Unsupervised
 
-K = 3 does not seem very good to me: Sus is not an end cluster, GBC is an end cluster.
+K = 3 only one lineage: sus is right after HBC
 
-K = 4 is better, slingshot finds the end clusters but there is a spurious end cluster.
+K = 4 two lineages: sus is right after HBC, differ only in end point (neuron, new cluster)
 
-K = 5 does not seem great to me: GBC is an end cluster and Sus and Microvillus are in the same lineage.
+K = 5 three lineages: hbc-gbc-immature neuron-new-neuron; hbc-gbc-mv; hbc-sus (perfect!)
 
 
 ```{r removeunassigned}
@@ -399,18 +398,19 @@ for (k in Kvec){
 
 #### Supervised
 
-K = 3 finds GBC as an end cluster (that I did not specify in the end.clus!).
+K = 3 four lineages: might be good, three lineages are correct and the fourth is plausible.
 
-K = 4 Yeah! it seems that it is what we want even if we still have a spurius end cluster and GBC not really at the junction.
- 
-K = 5 Yeah! even if GBC not really at the junction.
+K = 4 same as K=3
+
+K = 5 same as K=3
+
 
 ```{r slingshot_sup}
 for (k in Kvec){
   X <- W[our_cl != "-1", 1:k]
 
   lineages <- get_lineages(X, clus.labels = cl, start.clus = "c1",
-                           end.clus = c("c3", "c6", "c10"))
+                           end.clus = c("c3", "c6", "c7"))
   curves <- get_curves(X, clus.labels = cl, lineages = lineages)
   plot_curves(X, cl, curves, col.clus = pal)
   plot_tree(X, cl, lineages, col.clus = pal)
@@ -426,15 +426,16 @@ for (k in Kvec){
 
 
 ### Re-fitting zinbwave
+
 #### Unsupervised
 
-K = 3 is better than when we did not refit zinbwave but still not perfect: Sus in all the clusters. GBC not really at the junction.
+K = 3 four lineages: immature neurons as a end point (not good)
 
-K = 4 good even if GBC not really at the junction.
+K = 4 same as K = 3
 
-K = 5 not great GBC is an end cluster.
+K = 5 same as K = 3
 
-```{r refit_zinb, eval=FALSE}
+```{r refit_zinb}
 fn <- '../data/refit_zinbwave_slingshot.rda'
 
 if (runZinb & !file.exists(fn)){
@@ -447,7 +448,7 @@ if (runZinb & !file.exists(fn)){
 }
 ```
 
-```{r slingshot_unsup_refit, eval=FALSE}
+```{r slingshot_unsup_refit}
 for(k in Kvec) {
   X <- getW(zinbList[[k - 2]])[, 1:k]
 
@@ -467,13 +468,13 @@ for(k in Kvec) {
 
 #### Supervised
 
-K = 3 Yeah! close to perfection.
+K = 3 four lineages (the small new cluster is still an end point)
 
-K = 4 good even if GBC not really at the junction.
+K = 4 same as K=3
 
-K = 5 no, GBC is an end cluster.
+K = 5 three lineages (correct)
 
-```{r slingshot_sup_refit, eval=FALSE}
+```{r slingshot_sup_refit }
 for(k in Kvec){
   X <- getW(zinbList[[k - 2]])[, 1:k]
 
