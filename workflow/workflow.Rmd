@@ -38,7 +38,7 @@ if(packageVersion("zinbwave")<'0.99.4.2') stop("must have current develop versio
 ```{r parallel}
 runZinb <- TRUE
 runClus <- TRUE
-NCORES <- 7
+NCORES <- 2
 mysystem = Sys.info()[['sysname']]
 if (mysystem == 'Darwin'){
   registerDoParallel(NCORES)
