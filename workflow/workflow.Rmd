@@ -1,0 +1,552 @@
+---
+title: "Bioconductor workflow for single-cell RNA-seq data analysis: dimensionality reduction, clustering, and pseudotime ordering"
+author: 
+  - name: Author Name1
+    affiliation: Address of author1
+  - name: Author Name2
+    affiliation: Address of author2
+abstract: Abstracts should be up to 300 words and provide a succinct summary of the article. Although the abstract should explain why the article might be interesting, care should be taken not to inappropriately over-emphasise the importance of the work described in the article. Citations should not be used in the abstract, and the use of abbreviations should be minimized.
+keywords: Please list up to eight keywords to help readers interested in your article find it more easily.
+bibliography: ref.bib
+output: BiocWorkflowTools::f1000_article
+---
+
+```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
+knitr::opts_chunk$set(fig.align="center", cache=TRUE, error=FALSE, message=FALSE, warning=TRUE)
+#bioconductor:
+library(scRNAseq)
+library(scone)
+library(clusterExperiment)
+library(BiocParallel)
+#github
+library(zinbwave)
+library(slingshot)
+#CRAN
+library(doParallel)
+library(ggplot2)
+library(gplots)
+library(magrittr)
+library(matrixStats)
+library(Rtsne)
+library(RColorBrewer)
+library(digest)
+library(rARPACK)
+set.seed(20)
+if(packageVersion("zinbwave")<'0.99.4.2') stop("must have current develop version to avoid bugs")
+```
+
+```{r parallel}
+runZinb <- TRUE
+runClus <- TRUE
+NCORES <- 7
+mysystem = Sys.info()[['sysname']]
+if (mysystem == 'Darwin'){
+  registerDoParallel(NCORES)
+  register(DoparParam())
+}else if (mysystem == 'Linux'){
+  register(bpstart(MulticoreParam(workers=NCORES)))
+}else{
+  print('Please change this to allow parallel computing')
+  register(SerialParam())
+}
+```
+
+EAP: small request. Can everyone put a line between the beginning of a r chunk and text? It makes it nicely formated for my text editor. 
+
+# Introduction
+
+- growing interest in single-cell RNA-seq data. New statistical tools need to be developped compared to bulk RNA-seq because bias: drop-outs, amplification bias. There is also increasing size of datasets (10X-genomics, 1.3M cells) -> need of integrated workflows of new statistical tools
+- previously developped : F1000 Research bioc [@Lun2016] and scater [@McCarthy2017] are pipelines containing several useful methods for quality control, visualisation and pre-processing of data. In these pipelines, single-cell expression data are organized in objects of the SCESet class which allows integrated workflows. However, they are used mostly to prepare the data for further downstream analysis and do not focus on steps like clustering, pseudotime ordering, and DE analysis.
+- we propose an integrated workflow with dowstream analysis: dimensionality reduction adjusting for gene and cell-level covariates, robust and stable clustering using resumpling, pseudotime ordering, and DE analysis for the clusters found. We use a summarizedExperiment object to have an integrated pipeline. We also propose useful functions for visualization.
+
+
+```{r frog-picture, out.width='90%', fig.align='center', fig.cap = 'Our workflow'}
+knitr::include_graphics('schema_workflow.png')
+```
+
+
+# Analysis of olfactory stem cell lineages using single cell RNA-seq data
+## Overview
+
+The workflow is illustrated using data from a scRNA-seq study of stem cell differentiation in the mouse olfactory epithelium [@Fletcher2017]. The olfactory epithelium contains mature olfactory sensory neurons that are continuously renewed in the epithelium via neurogenesis through differentiation of globose basal cells (GBCs) which are the actively proliferating cells in the epithelium. When a severe injury to the entire tissue happens, the olfactory epithelium can regenerate from normally quiescent stem cells called horizontal basal cells (HBCs) which become activated to differentiate and reconstitute all major cell types in the epithelium.   
+
+The dataset we work with in this workflow was generated to study the differentitation from the HBCs stem cells to different cell types present in the epithelium. To map the developmental trajectories of the multiple cell lineages arising from the olfactory epithelium’s HBC stem cell, different lineages were assigned to each cell in the dataset and results were confirmed experimentally using in vivo lineage tracing. It was found that the first major bifurcation in the HBC lineage trajectory occurs prior to cell division, producing either sustentacular (support) cells or GBCs. Then, the GBC lineage, in turn, branches to give rise to olfactory sensory neurons, microvillous cells, and cells of the Bowman’s gland. 
+
+```{r stemcelldiff, out.width='60%', fig.align='center', fig.cap = 'Stem cell differentiation in the mouse olfactory epithelium. Figure 2e from Fletcher et al paper.'}
+knitr::include_graphics('stemcelldiff_Fletcher2017_2e.png')
+```
+
+## Generation of the data
+
+The dataset we use for the workflow is publicly available at https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE95601&format=file&file=GSE95601%5FoeHBCdiff%5FCufflinks%5FeSet%2ERda%2Egz. It contains 849 cells and 28361 detected genes. Each cell has been labelled with labels publicly available at https://raw.githubusercontent.com/rufletch/p63-HBC-diff/master/ref/oeHBCdiff_clusterLabels.txt. Pre-processing steps are as follow:
+- ERCC and CreER cells were removed,
+- low-quality cells were removed using package scone (ADD REF) and 
+
+FP: we should add details here.
+
+Finally to speed up the computations, we kept only the 1000 most variable genes in this analysis. After the preprocessing steps, the dataset we are working with has 1000 genes and 747 cells. Along the workflow, we use a SummarizedExperiement object to keep the counts and the metadata in the same object
+
+```{r datain}
+if(!file.exists("../data/oe_se_1000Var.rda")) {
+  source("createData.R")
+}
+
+load("../data/oe_se_1000Var.rda")
+core
+```
+
+```{r batches}
+batch <- colData(core)$Batch
+```
+
+Metadata for the cells is stored in colData from the SummarizedExperiment object. Cells have been processed in `r length(unique(batch))` different batches
+
+```{r batch}
+col_batch = rep(brewer.pal(9, "Set1"), 2)
+names(col_batch) = unique(batch)
+table(batch)
+```
+
+We also have access to the quality control measures that were used to filter low quality cells
+
+```{r qc}
+qc <- colData(core)[, !names(colData(core)) %in% c("Batch", "Experiment", "clusterLabels")]
+head(qc, 2)
+```
+
+```{r clusterlabels}
+clus.labels <- colData(core)[, "clusterLabels"]
+```
+
+In original work [@Fletcher2017], cells have been clustered into `r length(unique(clus.labels))` different clusters
+
+```{r original}
+col_clus <- c("transparent", brewer.pal(12, "Set3"), brewer.pal(8, "Set2"))
+col_clus <- col_clus[1:length(unique(clus.labels))]
+names(col_clus) <- sort(unique(clus.labels))
+table(clus.labels)
+```
+
+Note that in this dataset batches are somehow confounded with the clusters found in the original work.
+
+```{r clustbatch}
+table(data.frame(batch = as.vector(batch),
+                 cluster = clus.labels))
+```
+
+## Dimensionality reduction adjusting for batches
+
+In single-cell RNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analysis where clustering, pseudotime ordering, or differential expression analysis are performed. It allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low dimensional signal of interest.
+
+Here, we perform dimensionality reduction using bioconductor package zinbwave which allows to fit a zero-inflated negative binomial model (ZINB-WaVE) to get a low-dimensional representation of the data while accounting for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a sample-level intercept, which serves as a global-scaling normalization factor. The user can also include both gene-level and sample-level covariates. The inclusion of observed and unobserved sample-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects, such as gene length and GC-content effects.
+
+As with most of the dimensionality reduction methods, the user needs to specify the number of dimensions of the new low dimensional space. Here, we use 50 dimensions and we adjust for the batches.
+
+FP: do we want to expose the user to the equations? In the one hand, it would be easier to explain what we are looking at (W, normalized values, ...). In the other hand, it would need a good amount of explanations. I have a preference to show the equations, but what do you think?
+
+```{r zinb}
+fn <- '../data/zinb_batch.rda'
+if (runZinb & !file.exists(fn)){
+  print(system.time(se <- zinbDimRed(core, K = 50, X = '~ Batch',
+                                       residuals = TRUE,
+                                       normalizedValues = TRUE)))
+  save(se, file = fn)
+}else{
+  load(fn)
+}
+```
+
+DR: the chunk above and the similar one for clusterExperiment are fine for now, but in the published workflow, we should just rely on the markdown cache system (the code above doesn't check for changes to the file or code -- just that a version of the file exists).
+
+### Normalized values
+
+When function zinbDimRed is called, normalized values of the counts can be computed and used for visualization (e.g. in heatmaps). The normalized values are the residuals of the fit of our ZINB model where the gene and cell covariates were the same as the user specified in the zinbDimRed call but the number of unknown covariates is set to be null (i.e. K=0). When no unknown covariates are included in the model, the residuals represents the counts adjusted for the gene and cell covariates. To compute the residuals, we use the deviance residuals.
+
+FP: note to myself: why do we have infinite values in the residuals now? It 
+shows the same results as before, but we should not see infinite values here!
+
+
+```{r norm}
+norm <- assays(se)$normalizedValues
+if (sum(is.infinite(norm))>0){
+  maxNorm = max(norm[!is.infinite(norm)])
+  assays(se)$normalizedValues[is.infinite(norm)] <- maxNorm
+  norm <- assays(se)$normalizedValues
+}
+norm[1:3,1:3]
+```
+
+As expected, the distributions of the normalized counts are independent of the batches
+
+```{r lookatnorm}
+norm_order <- norm[, order(as.numeric(batch))]
+col_order <- as.numeric(batch)[order(as.numeric(batch))]
+boxplot(norm_order, main='Boxplot of normalized values\ncolor=batch',
+        col = col_order, staplewex = 0, outline = 0, border = col_order,
+        xaxt = 'n')
+```
+
+We performed principal component analysis (PCA) on the normalized values where colors are for batches on the left and original clusters on the right. As expected, there are no clustering on the left side and clustering on the right side. 
+
+```{r pcanorm}
+pca <- prcomp(t(norm))
+par(mfrow = c(1,2))
+plot(pca$x, col = col_batch[batch], pch = 20,
+     main="PCA of normalized values\ncolor=batch")
+plot(pca$x, col = col_clus[as.character(clus.labels)], pch = 20,
+     main = "PCA of normalized values\ncolor=cluster")
+par(mfrow = c(1,1))
+```
+
+Overall, looking at the normalized values, it seems that the batch effect was removed.
+
+### Dimensionality reduction
+
+Calling function zinbDimRed, we performed dimensionality reduction with K = 50. We can visualize the low dimensional matrix performing multidimensional scaling (MDS) in two dimensions. To make sure that the low dimensional matrix captured the signal of interest, the colors shown here are from the original clusters.
+
+```{r lookatdimred}
+W <- colData(se)[, grepl('^W', colnames(colData(se)))]
+W <- as.matrix(W)
+d <- dist(W)
+fit <- cmdscale(d, eig = TRUE, k = 2)
+plot(fit$points, col = col_clus[as.character(clus.labels)], main = 'MDS', pch = 20,
+     xlab = 'Component 1', ylab = 'Component 2')
+legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
+       fill = unique(col_clus), title = 'Sample')
+```
+
+
+## Clustering of the cells
+
+We use clusterExperiment with W.
+
+EP: I updated it to work on a SE object so that it has the meta data. If you have a summarized experiment object with W already, you could use that as long as assay(seObj) gives W. 
+
+
+```{r rsec_50}
+fn <- '../data/RSEC_W.rda'
+if (runClus & !file.exists(fn)){
+  #symbol for samples missing from original clustering
+  seObj <- SummarizedExperiment(t(W), colData = colData(core))
+  print(system.time(ceObj <- RSEC(seObj, k0s = 4:15, alphas = c(0.1),
+                                  betas = 0.8, dimReduce="none",
+                clusterFunction = "hierarchical01", minSizes=1,
+                ncores = NCORES, isCount=FALSE,
+                subsampleArgs = list(resamp.num=100,
+                                     clusterFunction="kmeans",
+                                     clusterArgs=list(nstart=10)),
+                seqArgs = list(k.min=3, top.can=5), verbose=TRUE,
+                combineProportion = 0.7,
+                mergeMethod = "none", random.seed=424242)))
+  save(ceObj, file = fn)
+}else{
+  load(fn)
+}
+```
+
+```{r examineCombineMany}
+plotClusters(ceObj, colPalette = c(bigPalette, rainbow(199)))
+```
+
+```{r plotcoclust}
+plotCoClustering(ceObj)
+```
+
+```{r tableclust}
+table(primaryClusterNamed(ceObj))
+sum(primaryCluster(ceObj) == -1)
+```
+
+FP: Elizabeth, we are working with the W here, does the locfdr make sense in this context? I set eval=FALSE in the next chunk to skip the merging step, let me know if you would rather keep using it. And if we want to still use the merging step, would we want to include it in RSEC function arguments instead of separately?
+
+EP: I don't think the merging step on the W makes a whole lot of sense -- the method is irrelevant. The merging is based on calculating the % of genes found significant (the specific method is arbitrary). The best thing would be to replace the W with residuals in the assay of `ceObj` (or whatever data that you will do the DE on for the time stuff below), and then run the merging step on that data.  I'm not particularly fond of `locfdr`. It was probably the method that gave the best merging to Russell and Diya. You'd really have to run `mergeClusters` setting `plotInfo="all"` and look at the results and decide both the cutoff level and the method. 
+
+EP: Also, if you don't save the output of `mergeClusters` it doesn't update `ceObj`. I was calling it for just the resulting plots, since it was already merged in RSEC above. I've changed to code to update ceObj below. 
+
+FP: Ha ok, good to know. I'll keep the eval=FALSE for the moment.
+
+```{r examineMergeClusters,eval=FALSE}
+#re-does merging simpling to make plot 
+#something like:
+#assay(ceObj)
+# if that replacement data should be considered on the transformed scale in plots, etc, the transformation function should be fixed as well:
+#transformation(ceObj)
+ceObj<-mergeClusters(ceObj, mergeMethod = "locfdr",
+              plotInfo = "mergeMethod", cutoff = 0.01)
+```
+
+
+So, let's look at a heatmap on normalized values.
+
+FP: Elizabeth, I did not find how to define the column annotation track in the plot below to have the same colors as in ceObj@clusterLegend[[1]]. I tried to use arguments annColors and annCol from aheatmap as it is said in plotHeatmap documentation that for signature matrix arguments can be passed to aheatmap. But I got the error "The following arguments to aheatmap cannot be set by the user in plotHeatmap:Rowv,Colv,color,annCol,annColors".
+
+EP: Fanny, you would need to use the argument 'clusterLegend'. That argument takes either the format of aheatmap (list with each element a *named* vector of colors) or the format of the clusterExperiment object (i.e. list with each element a matrix with columns for `name` and `color`). So I think the following code will run, though it might need the list to have names...
+
+But an easier fix to the code would be to set `visualizeData` option. I haven't tested this because I don't have the objects need run, so let me know if there is error.
+
+FP: it seems great to me, what do you think?
+
+EP: We should be careful, because the default in plotHeatmap is to plot the 500 most variable genes (maybe a slightly paternalistic default). I've changed it to `all` in the code here. I've also added the plotting of the batch, experiment, and Russell's original clusters. We may not want to keep all of them, but probably at least Russell's clusters for comparison.
+
+```{r heatmaps}
+# sampleData <- data.frame(ours = primaryCluster(ceObj))
+# plotHeatmap(assays(se)$normalizedValues,
+#             main = 'Normalized values, 1000 most variable genes',
+#             clusterSamplesData = ceObj@dendro_samples,
+#             sampleData = as.matrix(sampleData),clusterLegend=ceObj@clusterLegend[1])
+# easier fix:
+colData(ceObj)$clusterLabels <- as.factor(colData(ceObj)$clusterLabels)
+origClusterColors<-bigPalette[1:nlevels(colData(ceObj)$clusterLabels)]
+experimentColors<-bigPalette[1:nlevels(colData(ceObj)$Experiment)]
+batchColors<-bigPalette[1:nlevels(colData(ceObj)$Batch)]
+metaColors<-list("Experiment"=experimentColors,"Batch"=batchColors,"clusterLabels"=origClusterColors)
+
+plotHeatmap(ceObj, visualizeData = assays(se)$normalizedValues,
+            whichClusters = "primary",clusterFeaturesData="all",
+            clusterSamplesData = "dendrogramValue",
+            sampleData=c("clusterLabels","Batch","Experiment"),
+            clusterLegend=metaColors, annLegend=FALSE,
+            main = 'Normalized values, 1000 most variable genes',
+            breaks = 0.99)
+```
+
+```{r compareClusters}
+plot(fit$points, col = col_clus[as.character(clus.labels)],
+     main = 'MDS W, color = original clusters', pch = 20,
+     xlab = 'Component1', ylab = 'Component2')
+legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
+       fill = unique(col_clus), title = 'Sample')
+```
+
+```{r compare}
+palDF <- ceObj@clusterLegend[[1]]
+pal <- palDF[, 'color']
+names(pal) <- palDF[, 'name']
+pal["-1"] = "transparent"
+plot(fit$points, col = pal[primaryClusterNamed(ceObj)],
+     main = 'MDS W, color = our new clusters', pch = 20,
+     xlab = 'Component1', ylab = 'Component2')
+legend(x = 'bottomright', legend = names(pal), cex = .5,
+       fill = pal, title = 'Sample')
+```
+
+
+## Pseudotime ordering
+
+The goal of this section is to see if we need to refit zinbwave when we want to run slingshot. We first run slingshot on the W used by clusterExperiment. In the second part of this section, we fit zinbwave on the matrix of counts where the unassigned cells have been removed. For each part (without or with refitting zinbwave), we run slingshot in the supervised and unsupervised mode and try k=3, k=4, k=5 dimensions in W.
+
+From what I understand, start original clusters are 1 and 5 (HBC) and end original clusters are 15 (Microvillus), 9 and 12 (neuron), and 4, 7 (Sus). Additionally, we want the GBC cluster to be a junction before the differentiation between Microvillus and Neuron. The correspondance with the original clusters is as follow
+
+```{r tabagain}
+table(data.frame(original = clus.labels, ours = primaryClusterNamed(ceObj)))
+```
+
+Cluster name | Description | Color | Correspondence
+-------------|-------------|-------| ----------
+c1 | HBC | blue | original 1, 5
+c2 | GBC | immature neurons | MV 1 | green | original 2, 3, 11
+c3 | Sus | red | original 4, 7
+c4 | Neuron | orange | original 9, 12
+c5 | Immature Neuron | purple | original 10, 14
+c6 | new and small | brown | original 9
+c7 | Microvillus | cyan | original 15
+
+```{r kvec}
+Kvec <- c(3, 4, 5)
+```
+
+### Use previous W
+
+The input of slingshot is the W used for clusterExperiment where the number of dimensions is reduced to k where k in (3, 4, 5) here.
+
+#### Unsupervised
+
+K = 3 only one lineage: sus is right after HBC
+
+K = 4 two lineages: sus is right after HBC, differ only in end point (neuron, new cluster)
+
+K = 5 three lineages: hbc-gbc-immature neuron-new-neuron; hbc-gbc-mv; hbc-sus (perfect!)
+
+
+```{r removeunassigned}
+our_cl <- primaryClusterNamed(ceObj)
+cl = our_cl[our_cl != "-1"]
+pal = pal[names(pal) != '-1']
+```
+
+```{r slingshot_unsup}
+for (k in Kvec){
+  X <- W[our_cl != "-1", 1:k]
+
+  lineages <- get_lineages(X, clus.labels = cl, start.clus = "c1")
+  curves <- get_curves(X, clus.labels = cl, lineages = lineages)
+  plot_curves(X, cl, curves, col.clus = pal)
+  plot_tree(X, cl, lineages, col.clus = pal)
+
+  print(paste0("K=", k))
+  print(lineages$lineage1)
+  print(lineages$lineage2)
+  print(lineages$lineage3)
+  print(lineages$lineage4)
+  print(lineages$lineage5)
+}
+```
+
+#### Supervised
+
+K = 3 four lineages: might be good, three lineages are correct and the fourth is plausible.
+
+K = 4 same as K=3
+
+K = 5 same as K=3
+
+
+```{r slingshot_sup}
+for (k in Kvec){
+  X <- W[our_cl != "-1", 1:k]
+
+  lineages <- get_lineages(X, clus.labels = cl, start.clus = "c1",
+                           end.clus = c("c3", "c6", "c7"))
+  curves <- get_curves(X, clus.labels = cl, lineages = lineages)
+  plot_curves(X, cl, curves, col.clus = pal)
+  plot_tree(X, cl, lineages, col.clus = pal)
+
+  print(paste0("K=", k))
+  print(lineages$lineage1)
+  print(lineages$lineage2)
+  print(lineages$lineage3)
+  print(lineages$lineage4)
+  print(lineages$lineage5)
+}
+```
+
+
+### Re-fitting zinbwave
+
+#### Unsupervised
+
+K = 3 four lineages: immature neurons as a end point (not good)
+
+K = 4 same as K = 3
+
+K = 5 same as K = 3
+
+```{r refit_zinb}
+fn <- '../data/refit_zinbwave_slingshot.rda'
+
+if (runZinb & !file.exists(fn)){
+  zinbList <- lapply(Kvec, function(k){
+    zinbFit(se[, our_cl != "-1"], X = '~ Batch', K = k)
+  })
+  save(zinbList, file = fn)
+}else{
+  load(fn)
+}
+```
+
+```{r slingshot_unsup_refit}
+for(k in Kvec) {
+  X <- getW(zinbList[[k - 2]])[, 1:k]
+
+  lineages <- get_lineages(X, clus.labels = cl, start.clus = "c1")
+  curves <- get_curves(X, clus.labels = cl, lineages = lineages)
+  plot_curves(X, cl, curves, col.clus = pal)
+  plot_tree(X, cl, lineages, col.clus = pal)
+
+  print(paste0("K=", k))
+  print(lineages$lineage1)
+  print(lineages$lineage2)
+  print(lineages$lineage3)
+  print(lineages$lineage4)
+  print(lineages$lineage5)
+}
+```
+
+#### Supervised
+
+K = 3 four lineages (the small new cluster is still an end point)
+
+K = 4 same as K=3
+
+K = 5 three lineages (correct)
+
+```{r slingshot_sup_refit }
+for(k in Kvec){
+  X <- getW(zinbList[[k - 2]])[, 1:k]
+
+  lineages <- get_lineages(X, clus.labels = cl, start.clus = "c1",
+                           end.clus = c("c3", "c6", "c10"))
+  curves <- get_curves(X, clus.labels = cl, lineages = lineages)
+  plot_curves(X, cl, curves, col.clus = pal)
+  plot_tree(X, cl, lineages, col.clus = pal)
+
+  print(paste0("K=", k))
+  print(lineages$lineage1)
+  print(lineages$lineage2)
+  print(lineages$lineage3)
+  print(lineages$lineage4)
+  print(lineages$lineage5)
+}
+```
+
+CONCLUSION: K = 5 is never great as GBC is generally an end cluster. K = 4 is ok for all the methods and a bit better when zinbwave is refitted. K = 3 when refitting and supervized is good.  
+
+It seems to me that using slingshot on W without re-fitting zinbwave with k = 4 gives good results where supervized mode is slightly better than unsupervized. It is just a one shot example and we should obviously not make a general conclusion, but I think that for the purpose of the workflow it is fine to use slingshot without refitting zinbwave. We should write a note to the user that it is better to refit zinbwave to have more power.
+
+## DE analysis
+
+Here is the kind of plots we want to present
+
+```{r de, eval = FALSE}
+de <- read.csv('../data/oe_markers.txt', stringsAsFactors = F, header = F)
+de <- de$V1
+plotHeatmap(ceObj, 
+            visualizeData = assays(se)$normalizedValues[rownames(se) %in% de, ],
+            clusterSamplesData = "dendrogramValue",
+            whichClusters = "primary",
+            main = 'Normalized values, 1000 most variable genes',
+            breaks = 0.99)
+```
+
+
+
+
+## Further developments
+
+- DE analysis using slingshot and zinbwave
+- SingleCellExperiment class
+
+
+# Conclusions 
+
+This workflow provides guidance to perform downstream analysis of single-cell RNA-seq datasets in R. We propose a worflow in four steps: dimensionality reduction while adjusting for gene and cell-level covariates, robust and stable clustering, pseudotime ordering, and DE analysis between the clusters. The workflow is general and flexible allowing the user to sustitute each step of the worflow with a different R tool and to input data that have been previously processed by different tools. We hope the workflow will ease the technical aspect of single-cell RNA-seq data analysis to help discovering new biological insights.
+
+# Software availability
+This section will be generated by the Editorial Office before publication. Authors are asked to provide some initial information to assist the Editorial Office, as detailed below.
+
+1. URL link to where the software can be downloaded from or used by a non-coder (AUTHOR TO PROVIDE; optional)
+2. URL link to the author's version control system repository containing the source code (AUTHOR TO PROVIDE; required)
+3. Link to source code as at time of publication (*F1000Research* TO GENERATE)
+4. Link to archived source code as at time of publication (*F1000Research* TO GENERATE)
+5. Software license (AUTHOR TO PROVIDE; required)
+
+The three packages zinbwave, clusterExperiment, and slingshot used in the workflow are bioconductor packages and are available on github at respectively https://github.com/drisso/zinbwave, https://github.com/epurdom/clusterExperiment, and https://github.com/kstreet13/slingshot. The source code for this package can be found at https://github.com/fperraudeau/singlecellworkflow under license XXX. 
+
+```{r}
+sessionInfo()
+```
+
+
+# Author contributions
+In order to give appropriate credit to each author of an article, the individual contributions of each author to the manuscript should be detailed in this section. We recommend using author initials and then stating briefly how they contributed.
+
+# Competing interests
+All financial, personal, or professional competing interests for any of the authors that could be construed to unduly influence the content of the article must be disclosed and will be displayed alongside the article. If there are no relevant competing interests to declare, please add the following: 'No competing interests were disclosed'.
+
+# Grant information
+Please state who funded the work discussed in this article, whether it is your employer, a grant funder etc. Please do not list funding that you have that is not relevant to this specific piece of research. For each funder, please state the funder’s name, the grant number where applicable, and the individual to whom the grant was assigned. If your work was not funded by any grants, please include the line: 'The author(s) declared that no grants were involved in supporting this work.'
+
+# Acknowledgments
+This section should acknowledge anyone who contributed to the research or the
+article but who does not qualify as an author based on the criteria provided earlier (e.g. someone or an organization that provided writing assistance). Please state how they contributed; authors should obtain permission to acknowledge from all those mentioned in the Acknowledgments section.
+
