@@ -81,6 +81,7 @@ knitr::include_graphics('schema_workflow.png')
 
 
 # Analysis of olfactory stem cell lineages using scRNA-seq data
+
 ## Overview
 
 ```{r stemcelldiff, echo=FALSE, out.width='60%', fig.align='center', fig.cap = 'Stem cell differentiation in the mouse olfactory epithelium. This figure has been reproduced with kind permission from [@Fletcher2017].'}
@@ -89,15 +90,15 @@ knitr::include_graphics('stemcelldiff_Fletcher2017_2e.png')
 
 This workflow is illustrated using data from a scRNA-seq study of stem cell differentiation in the mouse olfactory epithelium (OE) [@Fletcher2017]. The olfactory epithelium contains mature olfactory sensory neurons that are continuously renewed in the epithelium via neurogenesis through differentiation of globose basal cells (GBCs), which are the actively proliferating cells in the epithelium. When a severe injury to the entire tissue happens, the olfactory epithelium can regenerate from normally quiescent stem cells called horizontal basal cells (HBCs) which become activated to differentiate and reconstitute all major cell types in the epithelium.   
 
-The scRNA-seq dataset we work with was generated to study the differentitation of HBCs stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. Then, the expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using the statistical analysis pipeline presented in this workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017] [SD: Add reference to Slingshot and ZINB-WaVE biorXiv manuscripts.].
+The scRNA-seq dataset we work with was generated to study the differentitation of HBCs stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. Then, the expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using a statistical analysis pipeline analogous to that in the present workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017] [SD: Add reference to Slingshot and ZINB-WaVE biorXiv manuscripts.].
 
-It was found that the first major bifurcation in the HBC lineage trajectory occurs prior to cell division, producing either mature sustentacular (mSUS) cells or GBCs. Then, the GBC lineage, in turn, branches to give rise to mature olfactory sensory neurons (mOSN), microvillous (MV) cells, and cells of the Bowman’s gland. See Figure \@ref(fig:stemcelldiff). In this study, we show possible steps to recover the lineages found in the original study from the matrix of raw counts publicly available.
+It was found that the first major bifurcation in the HBC lineage trajectory occurs prior to cell division, producing either mature sustentacular (mSUS) cells or GBCs. Then, the GBC lineage, in turn, branches off to give rise to mature olfactory sensory neurons (mOSN), microvillous (MV) cells, and cells of the Bowman gland. See Figure \@ref(fig:stemcelldiff). In this study, we describe a sequence of steps to recover the lineages found in the original study, starting from the publicly-available genes x cells matrix of raw counts [SD: Add URL].
 
 FP: ask Russell if we can use the Figure \@ref(fig:stemcelldiff) here.
 
 ## Pre-processing
 
-Counts for all genes in each cell were obtained from NCBI Gene Expression Omnibus (GEO) with accession number GSE95601. Before filtering, the dataset has 849 cells and 28361 detected genes. 
+Counts for all genes in each cell were obtained from NCBI Gene Expression Omnibus (GEO) with accession number GSE95601. Before filtering, the dataset has 849 cells and 28,361 detected genes (i.e., genes with non-zero read counts). 
 
 ```{r, echo = FALSE}
 urls = c("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE95601&format=file&file=GSE95601%5FoeHBCdiff%5FCufflinks%5FeSet%2ERda%2Egz",
@@ -125,7 +126,7 @@ E <- E[rowSums(E)>0,]
 dim(E)
 ```
 
-We removed the genes corresponding to ERCC spike-ins and the CreER gene as it corresponds to a marker gene for the HBCs cells. Davide, is that correct?
+We remove the ERCC spike-in sequences and the CreER gene as it corresponds to a marker gene for HBCs. Davide, is that correct?
 
 ```{r}
 # remove ERCC and CreER genes
@@ -136,7 +137,7 @@ E <- E[-which(rownames(E)=="CreER"), ]
 dim(E)
 ```
 
-Along the workflow, we use a SummarizedExperiment object to keep the counts and metadata in a unique object. In the metadata, we dispose of quality control measures for each cell, information on the batches in which the cells were sequenced, and clusters and lineages found in the original publication [@Fletcher2017]. Cells with a cluster of `-2` are cells not assigned to a cluster in the orginal publication.
+Throughout the workflow, we use an object of class SummarizedExperiment to keep track of the counts and their associated metadata within a single object. The cell-level metadata contain quality control (QC) measures, sequencing batche ID, and cluster labels and lineage labels from the original publication [@Fletcher2017]. Cells with a cluster label of `-2` were not assigned to a cluster in the orginal publication.
 
 ```{r}
 # Extract QC metrics
@@ -164,7 +165,7 @@ se <- SummarizedExperiment(assays = list(counts = E),
 se
 ```
 
-Using bioconductor package scone, we removed low quality cells that did not pass our quality control rule, that is ... See Figure \@ref(fig:scone). Davide, would you like to describe your choices for scone here?
+Using the Bioconductor R package scone [SD: scone not yet released on Bioconductor], we remove low-quality cells that did not pass our quality control filter, that is ... See Figure \@ref(fig:scone). Davide, would you like to describe your choices for scone here?
 
 ```{r scone, fig.cap="Plot generated by scone to filter low quality cells."}
 # Metric-based Filtering sample-filtering
@@ -185,10 +186,10 @@ se <- se[, mfilt]
 dim(se)
 ```
 
-Finally, to speed up the computations, we kept only the 1000 most variable genes. We recommend not to be so stringent in your analysis and perform the analysis on more genes.
+Finally, to speed up the computations, we retain only the 1,000 most variable genes. We recommend, however, not to be so stringent in your actual data analysis.
 
 ```{r}
-# filtering to top 1000 most variable
+# Filtering to top 1000 most variable
 vars <- rowVars(log1p(assay(se)))
 names(vars) <- rownames(se)
 vars <- sort(vars, decreasing = TRUE)
@@ -198,12 +199,13 @@ save(core, file="../data/oe_se_1000Var.rda")
 
 
 ## Dataset structure
-Overall, after the preprocessing steps, our dataset has 1000 genes and 747 cells.
+
+Overall, after the pre-processing steps, our dataset has 1,000 genes and 747 cells.
 ```{r}
 core
 ```
 
-Metadata for the cells is stored in the object colData from the SummarizedExperiment object. Cells have been processed in 18 different batches.
+Metadata for the cells are stored in the object colData from the SummarizedExperiment object. Cells were processed in 18 different batches.
 
 ```{r batch}
 batch <- colData(core)$Batch
@@ -213,7 +215,7 @@ names(col_batch) = unique(batch)
 table(batch)
 ```
 
-In original work [@Fletcher2017], cells have been clustered into 14 different clusters where 151 cells were not assigned to a cluster.
+In the original work [@Fletcher2017], cells were clustered into 14 different clusters, where 151 cells were not assigned to a cluster [SD: -2 labels?].
 
 ```{r original}
 clus.labels <- colData(core)[, "clusterLabels"]
@@ -222,15 +224,14 @@ col_clus <- col_clus[1:length(unique(clus.labels))]
 names(col_clus) <- sort(unique(clus.labels))
 table(clus.labels)
 ```
-
-Note that some of the batches are confounded with the clusters found in the original work which could be a problem when we correct for batch effect in the dimensionality reduction step.
+Note that there is partial confounding of batches and clusters, which could be problematic when correcting for batch effects in the dimensionality reduction step.
 
 ```{r clustbatch}
 table(data.frame(batch = as.vector(batch),
                  cluster = clus.labels))
 ```
 
-## Dimensionality reduction adjusting for batches
+## Dimensionality reduction adjusting for batches: ZINB-WaVE
 
 In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analysis where clustering, pseudotime ordering, or differential expression analysis are performed. It allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low dimensional signal of interest [@Peer2017].
 
@@ -304,7 +305,7 @@ legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
        fill = unique(col_clus), title = 'Sample')
 ```
 
-## Clustering of the cells
+## Cell clustering: RSEC
 
 The next step of the workflow is to cluster the cells according to the low dimensional matrix `W` computed in the previous step. We used function `RSEC` from bioconductor package clusterExperiment. Function `RSEC` implements a resampling-based sequential ensemble clustering method for identifying stable and tight cell clusters. The method aggregates multiple clustering results obtained from different base clustering algorithms and applications of a given algorithm to resampled versions of the learning set.
 
@@ -382,7 +383,7 @@ legend(x = 'bottomright', legend = names(pal), cex = .5,
        fill = pal, title = 'Sample')
 ```
 
-## Pseudotime ordering
+## Cell lineage and pseudotime inference: Slingshot
 
 We now want to demonstrate how to use the R software package `slingshot` to infer branching lineages and order cells by developmental progression. We connect the clusters identified by `RSEC` with a minimum spanning tree to learn the global lineage structure. Then, we refine this structure and order cells using highly stable simultaneous principal curves to infer smooth, branching lineages. 
 
@@ -445,7 +446,7 @@ print(lineages$lineage2)
 print(lineages$lineage3)
 ```
 
-## DE analysis
+## Differential expression analysis
 
 Kelly, would you like to complete this part? Here is the kind of plots we would want to present.
 
