@@ -1,10 +1,16 @@
 ---
-title: "Bioconductor workflow for single-cell RNA sequencing data analysis: dimensionality reduction, clustering, and pseudotime ordering"
+title: "Bioconductor workflow for single-cell RNA sequencing: Dimensionality reduction, clustering, and lineage inference"
 author: 
-  - name: Author Name1
-    affiliation: Address of author1
-  - name: Author Name2
-    affiliation: Address of author2
+  - name: Fanny Perraudeau
+    affiliation: Graduate Group in Biostatistics, UC Berkeley
+  - name: Davide Risso
+    affiliation: Division of Biostatistics and Epidemiology, Department of Healthcare Policy and Research, Weill Cornell Medicine
+  - name: Kelly Street
+    affilitation: Graduate Group in Biostatistics, UC Berkeley
+  - name: Elizabeth Purdom
+    affiliation: Department of Statistics, UC Berkeley
+  - name: Sandrine Dudoit
+    affiliation: Division of Biostatistics and Department of Statistics
 abstract: Abstracts should be up to 300 words and provide a succinct summary of the article. Although the abstract should explain why the article might be interesting, care should be taken not to inappropriately over-emphasise the importance of the work described in the article. Citations should not be used in the abstract, and the use of abbreviations should be minimized.
 keywords: single-cell, workflow, single-cell-genomics, bioconductor, rna-seq, gene-expression, statistical-models, r
 bibliography: ref.bib
@@ -63,11 +69,11 @@ EAP: small request. Can everyone put a line between the beginning of a r chunk a
 
 # Introduction
 
-Single-cell RNA sequencing (scRNA-seq) is a powerful and promising class of high-throughput assays that enables researchers to measure genome-wide transcription levels for individual cells. To properly account for features specific to scRNA-seq, such as zero inflation and high levels of technical noise, several novel statistical methods have been developed to tackle different problems like dimensionality reduction, clustering, and the inference of cell lineages. While each individual method is useful to analyze scRNA-seq data, there is an increasing need for creating integrated workflows of these new statistical tools. This is all the more true that novel sequencing technologies are able to sequence more and more cells in a single sequencing run. For example, the Chromium Single Cell 3' Solution was recently used to sequence and profile about 1.3 million cells from embryonic mice brains. 
+Single-cell RNA sequencing (scRNA-seq) is a powerful and promising class of high-throughput assays that enable researchers to measure genome-wide transcription levels at the resolution of single cells. To properly account for features specific to scRNA-seq, such as zero inflation and high levels of technical noise, several novel statistical methods have been developed to tackle different problems like dimensionality reduction, clustering, and the inference of cell lineages and pseudotimes. While each individual method is useful to analyze scRNA-seq data, there is an increasing need for creating integrated workflows of these new statistical tools. This is all the more true that novel sequencing technologies are able to sequence more and more cells in a single sequencing run. For example, the Chromium Single Cell 3' Solution was recently used to sequence and profile about 1.3 million cells from embryonic mice brains. 
 
-Some workflows have already been developped to analysis scRNA-seq data with several useful methods for quality control, visualisation and pre-processing of the data. The workflow for low-level analyses of scRNA-seq data described in [@Lun2016] or the package `scater` [@McCarthy2017] are examples of workflows based on software packages from the open-source Bioconductor project [@Huber2015] and cover basic steps including quality control, data exploration and normalization. In these workflows, single-cell expression data are organized in objects of the SCESet class allowing integrated analysis. However, these workflows are mostly used to prepare the data for further downstream analysis and do not focus on steps like clustering and pseudotime ordering.
+scRNA-seq workflows have already been developed, with several useful methods for quality control, visualization, and pre-processing of the data. The workflow for low-level analysis of scRNA-seq data described in [@Lun2016] or the package `scater` [@McCarthy2017] are examples of workflows based on software packages from the open-source Bioconductor Project [@Huber2015] and cover basic steps, including quality control, data exploration, and normalization. In these workflows, single-cell expression data are organized in objects of the SCESet class allowing integrated analysis. However, these workflows are mostly used to prepare the data for further downstream analysis and do not focus on steps like clustering and pseudotime ordering.
 
-Here, we propose an integrated workflow with dowstream analysis where our workflow has three main steps: dimensionality reduction adjusting for gene and cell-level covariates, robust and stable clustering using resampling-based sequential ensemble clustering, and inference of branching lineages and ordering of the cells by developmental progression. Along the workflow, we use a unique SummarizedExperiment object to create an easy to use sequence of steps where for each steps a different R package is used.
+Here, we propose an integrated workflow for dowstream analysis, with the following three main steps: dimensionality reduction adjusting for gene and cell-level covariates, robust and stable clustering using resampling-based sequential ensemble clustering, and inference of cell lineages and ordering of the cells by developmental progression. Along the workflow, we use a unique SummarizedExperiment object to create an easy to use sequence of steps, where for each steps a different R package is used.
 
 ```{r schema, echo=FALSE, out.width='90%', fig.cap="Workflow for analyzing scRNA-seq datasets. On the right side, major plots generated by the workflow."}
 knitr::include_graphics('schema_workflow.png')
