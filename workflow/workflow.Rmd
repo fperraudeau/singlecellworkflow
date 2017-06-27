@@ -293,7 +293,7 @@ par(mfrow = c(1,1))
 
 ### Dimensionality reduction
 
-The `zinbDimRed` function can also be used to perform dimensionality reduction, where the user-supplied dimension `K` of the low-dimensional space is set here to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captured the biological signal of interest, we plotted the MDS of `W` with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).
+The `zinbDimRed` function can also be used to perform dimensionality reduction, where in this workflow the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).
 
 ```{r mdsW, fig.cap="MDS of the low dimensional matrix `W` where each point represent a cell. Cells have been colored according to the original published clusters."}
 W <- colData(se)[, grepl('^W', colnames(colData(se)))]
