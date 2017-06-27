@@ -80,7 +80,7 @@ knitr::include_graphics('schema_workflow.png')
 ```
 
 
-# Analysis of olfactory stem cell lineages using scRNA-seq data
+# Analysis of olfactory stem cell differentiation using scRNA-seq data
 
 ## Overview
 
@@ -231,14 +231,14 @@ table(data.frame(batch = as.vector(batch),
                  cluster = clus.labels))
 ```
 
-## Dimensionality reduction adjusting for batches: ZINB-WaVE
+## Dimensionality reduction: ZINB-WaVE
 
 In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime ordering, and differential expression (DE) analysis. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low dimensional signal of interest [@Peer2017] [@Risso2017 ][SD: Ref to ZIFA.].
 
 Here, we perform dimensionality reduction using the Bioconductor R package `zinbwave`, which fits a zero-inflated negative binomial model (ZINB-WaVE) that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a sample-level intercept, which serves as a global-scaling normalization factor. The user can also include both gene-level and sample-level covariates. The inclusion of observed and unobserved sample-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects, such as gene length and GC-content effects. For greated detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
 
 [SD: Include Fig. 1 from [@Risso2017]?]
-As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for the batch effects. 
+As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects. 
 
 ```{r zinb}
 fn <- '../data/zinb_batch.rda'
@@ -256,7 +256,7 @@ DR: the chunk above and the similar one for clusterExperiment are fine for now, 
 
 ### Normalization
 
-When function `zinbDimRed` is called, normalized values of the counts can be computed and used for visualization (e.g. in heatmaps). The normalized values are the residuals of the fit of the ZINB-WaVE model where the gene and cell covariates were specified by the user when calling function `zinbDimRed`, but no low dimensional matrix is computed. In that case, the residuals represent the counts adjusted for the gene and cell covariates and should capture the biological signal of interest. To compute the residuals, the deviance is used. 
+The function `zinbDimRed` returns normalized expression measures as deviance residuals from the fit of the ZINB-WaVE model with user-supplied gene- and cell-level covariates. Such residuals can be used for visualization purposes (e.g., in heatmaps, boxplots). Note that in this case no low-dimensional matrix is computed, as some of the biological signal of interest could be removed when computing residuals with respect to this matrix. 
 
 ```{r norm}
 norm <- assays(se)$normalizedValues
@@ -268,7 +268,7 @@ if (sum(is.infinite(norm))>0){
 norm[1:3,1:3]
 ```
 
-As expected, the normalized values are uniformly distributed for the different batches. See Figure \@ref(fig:boxplotNorm).
+As expected, the normalized values no longer exhibit batch effects (Figure \@ref(fig:boxplotNorm)).
 
 ```{r boxplotNorm, fig.cap="Boxplot of normalized values. Different colors are for different batches."}
 norm_order <- norm[, order(as.numeric(batch))]
@@ -278,7 +278,7 @@ boxplot(norm_order, col = col_order, staplewex = 0, outline = 0,
 abline(h=0)
 ```
 
-The principal component analysis (PCA) of the normalized values shows that, as expected, cells do not cluster by batch but by orginal published clusters. See Figure \@ref(fig:pcanorm). Overall, looking at the normalized values, it seems that the batch effect has been removed.
+The principal component analysis (PCA) of the normalized values shows that, as expected, cells do not cluster by batch but by the orginal clusters (Figure \@ref(fig:pcanorm)). Overall, it seems that normalization was effective at removing batch effects.
 
 ```{r pcanorm, fig.cap="PCA of normalized values where each point represent a cell. In the left panel, cells have been colored according to their batch. In the right panel, colors correspond to the original published clusters."}
 pca <- prcomp(t(norm))
@@ -293,7 +293,7 @@ par(mfrow = c(1,1))
 
 ### Dimensionality reduction
 
-Calling function `zinbDimRed` from package `zinbwave`, we performed dimensionality reduction where the number of dimensions in the low dimensional space is `K = 50`. We call the matrix in the low dimensional space `W`. We can visualize `W` in two dimensions by performing multidimensional scaling (MDS) on the distance matrix of `W` where the euclidian distance is used. To make sure that `W` captured the biological signal of interest, we plotted the MDS of `W` with colors corresponding to the original published clusters. See Figure \@ref(fig:mdsW).
+The `zinbDimRed` function can also be used to perform dimensionality reduction, where the user-supplied dimension `K` of the low-dimensional space is set here to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captured the biological signal of interest, we plotted the MDS of `W` with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).
 
 ```{r mdsW, fig.cap="MDS of the low dimensional matrix `W` where each point represent a cell. Cells have been colored according to the original published clusters."}
 W <- colData(se)[, grepl('^W', colnames(colData(se)))]
