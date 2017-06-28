@@ -10,7 +10,7 @@ author:
   - name: Elizabeth Purdom
     affiliation: Department of Statistics, UC Berkeley
   - name: Sandrine Dudoit
-    affiliation: Division of Biostatistics and Department of Statistics
+    affiliation: Division of Biostatistics, UC Berkeley, and Department of Statistics, UC Berkeley
 abstract: Abstracts should be up to 300 words and provide a succinct summary of the article. Although the abstract should explain why the article might be interesting, care should be taken not to inappropriately over-emphasise the importance of the work described in the article. Citations should not be used in the abstract, and the use of abbreviations should be minimized.
 keywords: single-cell, single-cell genomics, RNA-seq, gene expression, zero inflation, normalization, clustering, lineage inference, statistical models, workflow, R, Bioconductor
 bibliography: ref.bib
@@ -62,36 +62,37 @@ EAP: small request. Can everyone put a line between the beginning of a r chunk a
 
 # Introduction
 
-Single-cell RNA sequencing (scRNA-seq) is a powerful and promising class of high-throughput assays that enable researchers to measure genome-wide transcription levels at the resolution of single cells. To properly account for features specific to scRNA-seq, such as zero inflation and high levels of technical noise, several novel statistical methods have been developed to tackle questions that include dimensionality reduction, clustering, and the inference of cell lineages and pseudotimes. While each individual method is useful on its own for addressing a specific question, there is an increasing need for workflows that integrate these tools to yield a seamless scRNA-seq data analysis pipeline. This is all the more true, with novel sequencing technologies that allow an increasing number of cells to be sequenced in each run. For example, the Chromium Single Cell 3' Solution was recently used to sequence and profile about 1.3 million cells from embryonic mouse brains. 
+Single-cell RNA sequencing (scRNA-seq) is a powerful and promising class of high-throughput assays that enable researchers to measure genome-wide transcription levels at the resolution of single cells. To properly account for features specific to scRNA-seq, such as zero inflation and high levels of technical noise, several novel statistical methods have been developed to tackle questions that include normalization, dimensionality reduction, clustering, the inference of cell lineages and pseudotimes, and differential expression (DE) analysis. While each individual method is useful on its own for addressing a specific question, there is an increasing need for workflows that integrate these tools to yield a seamless scRNA-seq data analysis pipeline. This is all the more true, with novel sequencing technologies that allow an increasing number of cells to be sequenced in each run. For example, the Chromium Single Cell 3' Solution was recently used to sequence and profile about 1.3 million cells from embryonic mouse brains. 
 
-scRNA-seq workflows have already been developed, with several useful methods for quality control, visualization, and pre-processing of the data. The workflow for low-level analysis of scRNA-seq data described in [@Lun2016] or the package `scater` [@McCarthy2017] are examples of workflows based on software packages from the open-source Bioconductor Project [@Huber2015] and cover basic steps, including quality control, data exploration, and normalization. In these workflows, single-cell expression data are organized in objects of the `SCESet` class allowing integrated analysis. However, these workflows are mostly used to prepare the data for further downstream analysis and do not focus on steps like clustering and pseudotime ordering.
+scRNA-seq low-level analysis workflows have already been developed, with useful methods for quality control (QC), exploratory data analysis (EDA), pre-processing, normalization, and visualization. The workflow described in [@Lun2016] and the package `scater` [@McCarthy2017] are such examples based on open-source R software packages from the Bioconductor Project [@Huber2015]. In these workflows, single-cell expression data are organized in objects of the `SCESet` class allowing integrated analysis. However, these workflows are mostly used to prepare the data for further downstream analysis and do not focus on steps such as cell clustering and lineage inference.
 
-Here, we propose an integrated workflow for dowstream analysis, with the following four main steps: (1) dimensionality reduction accounting for zero inflation and adjusting for gene and cell-level covariates; (2) robust and stable clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and ordering of the cells by developmental progression; and (4) DE analysis within and between the lineages. Along the workflow, we use a unique `SummarizedExperiment` object to create an easy to use sequence of steps, where a different R package is used for each step.
+Here, we propose an integrated workflow for dowstream analysis, with the following four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and ordering of the cells by developmental progression; and (4) DE analysis within and between the lineages. Along the workflow, we use a unique `SummarizedExperiment` object to create an easy to use sequence of steps, where a different R package is used for each step.
 
-```{r schema, echo=FALSE, out.width='90%', fig.cap="Workflow for analyzing scRNA-seq datasets. On the right side, major plots generated by the workflow."}
+```{r schema, echo=FALSE, out.width='90%', fig.cap="Workflow for analyzing scRNA-seq datasets. On the right, main plots generated by the workflow."}
 knitr::include_graphics('schema_workflow.png')
 ```
 
+[SD: Fig. 1: For DE, might want to deemphasize edgeR, as it is not our contribution, by mentioning other packages.]
 
 # Analysis of olfactory stem cell differentiation using scRNA-seq data
 
 ## Overview
 
-```{r stemcelldiff, echo=FALSE, out.width='60%', fig.align='center', fig.cap = 'Stem cell differentiation in the mouse olfactory epithelium. This figure has been reproduced with kind permission from (Fletcher et al. 2017).'}
+```{r stemcelldiff, echo=FALSE, out.width='60%', fig.align='center', fig.cap = 'Stem cell differentiation in the mouse olfactory epithelium. This figure was reproduced with kind permission from (Fletcher et al. 2017).'}
 knitr::include_graphics('stemcelldiff_Fletcher2017_2e.png')
 ```
 
-This workflow is illustrated using data from a scRNA-seq study of stem cell differentiation in the mouse olfactory epithelium (OE) [@Fletcher2017]. The olfactory epithelium contains mature olfactory sensory neurons that are continuously renewed in the epithelium via neurogenesis through differentiation of globose basal cells (GBCs), which are the actively proliferating cells in the epithelium. When a severe injury to the entire tissue happens, the olfactory epithelium can regenerate from normally quiescent stem cells called horizontal basal cells (HBCs) which become activated to differentiate and reconstitute all major cell types in the epithelium.   
+This workflow is illustrated using data from a scRNA-seq study of stem cell differentiation in the mouse olfactory epithelium (OE) [@Fletcher2017]. The olfactory epithelium contains mature olfactory sensory neurons that are continuously renewed in the epithelium via neurogenesis through the differentiation of globose basal cells (GBCs), which are the actively proliferating cells in the epithelium. When a severe injury to the entire tissue happens, the olfactory epithelium can regenerate from normally quiescent stem cells called horizontal basal cells (HBCs) which become activated to differentiate and reconstitute all major cell types in the epithelium.   
 
-The scRNA-seq dataset we work with was generated to study the differentitation of HBCs stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. Then, the expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using a statistical analysis pipeline analogous to that in the present workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017] [@Risso2017], and [@Street2017].
+The scRNA-seq dataset we use as case study was generated to study the differentitation of HBC stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. Then, the expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using a statistical analysis pipeline analogous to that in the present workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017],  [@Risso2017], and [@Street2017].
 
-It was found that the first major bifurcation in the HBC lineage trajectory occurs prior to cell division, producing either mature sustentacular (mSUS) cells or GBCs. Then, the GBC lineage, in turn, branches off to give rise to mature olfactory sensory neurons (mOSN), microvillous (MV) cells, and cells of the Bowman gland. See Figure \@ref(fig:stemcelldiff). In this study, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes x cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
+It was found that the first major bifurcation in the HBC lineage trajectory occurs prior to cell division, producing either mature sustentacular (mSUS) cells or GBCs. Then, the GBC lineage, in turn, branches off to give rise to mature olfactory sensory neurons (mOSN), microvillous (MV) cells, and cells of the Bowman gland (Figure \@ref(fig:stemcelldiff)_. In this study, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes x cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
 
 FP: ask Russell if we can use the Figure \@ref(fig:stemcelldiff) here.
 
 ## Pre-processing
 
-Counts for all genes in each cell were obtained from NCBI Gene Expression Omnibus (GEO) with accession number GSE95601. Before filtering, the dataset has 849 cells and 28,361 detected genes (i.e., genes with non-zero read counts). 
+Counts for all genes in each cell were obtained from NCBI Gene Expression Omnibus (GEO), with accession number GSE95601. Before filtering, the dataset has 849 cells and 28,361 detected genes (i.e., genes with non-zero read counts). 
 
 ```{r, echo = FALSE}
 urls = c("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE95601&format=file&file=GSE95601%5FoeHBCdiff%5FCufflinks%5FeSet%2ERda%2Egz",
@@ -119,7 +120,7 @@ E <- E[rowSums(E)>0,]
 dim(E)
 ```
 
-We remove the ERCC spike-in sequences and the CreER gene as it corresponds to a marker gene for HBCs. Davide, is that correct?
+We remove the ERCC spike-in sequences and the CreER gene, as the later corresponds to a marker gene for HBCs. Davide, is that correct?
 
 ```{r}
 # remove ERCC and CreER genes
@@ -130,7 +131,7 @@ E <- E[-which(rownames(E)=="CreER"), ]
 dim(E)
 ```
 
-Throughout the workflow, we use an object of class `SummarizedExperiment` to keep track of the counts and their associated metadata within a single object. The cell-level metadata contain quality control (QC) measures, sequencing batche ID, and cluster labels and lineage labels from the original publication [@Fletcher2017]. Cells with a cluster label of `-2` were not assigned to a cluster in the original publication.
+Throughout the workflow, we use an object of class `SummarizedExperiment` to keep track of the counts and their associated metadata within a single object. The cell-level metadata contain quality control (QC) measures, sequencing batch ID, and cluster and lineage labels from the original publication [@Fletcher2017]. Cells with a cluster label of `-2` were not assigned to a cluster in the original publication.
 
 ```{r}
 # Extract QC metrics
@@ -180,7 +181,7 @@ se <- se[, mfilt]
 dim(se)
 ```
 
-Finally, to speed up the computations, we retain only the 1,000 most variable genes. We recommend, however, not to be so stringent in your actual data analysis.
+Finally, to speed up the computations, we retain only the 1,000 most variable genes. We recommend, however, not to be so stringent in an actual data analysis.
 
 ```{r,eval=FALSE}
 # Filtering to top 1000 most variable
@@ -212,7 +213,7 @@ names(col_batch) = unique(batch)
 table(batch)
 ```
 
-In the original work [@Fletcher2017], cells were clustered into 14 different clusters, where 151 cells have a cluster label of `-2`, that is they were not assigned to a cluster in the original publication. [SD: -2 labels? FP: yes]
+In the original work [@Fletcher2017], cells were clustered into 14 different clusters, with 151 cells not assigned to any cluster (i.e., cluster label of `-2`). 
 
 ```{r original}
 clus.labels <- colData(core)[, "clusterLabels"]
@@ -222,7 +223,7 @@ names(col_clus) <- sort(unique(clus.labels))
 table(clus.labels)
 ```
 
-Note that there is partial nesting [SD: Did you mean nesting? FP: yes] of batches and clusters, which could be problematic when correcting for batch effects in the dimensionality reduction step.
+Note that there is partial nesting of batches within clusters (i.e., cell type), which could be problematic when correcting for batch effects in the dimensionality reduction step.
 
 ```{r clustbatch}
 table(data.frame(batch = as.vector(batch),
@@ -231,11 +232,11 @@ table(data.frame(batch = as.vector(batch),
 
 ## Normalization and dimensionality reduction: ZINB-WaVE
 
-In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime ordering, and differential expression (DE) analysis. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low dimensional signal of interest [@Peer2017] [@Risso2017][@Pierson2015].
+In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime ordering, and differential expression analysis. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low-dimensional signal of interest [@Peer2017] [@Risso2017][@Pierson2015].
 
-Here, we perform dimensionality reduction using the Bioconductor R package `zinbwave`, which fits a zero-inflated negative binomial model (ZINB-WaVE) that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a sample-level intercept, which serves as a global-scaling normalization factor. The user can also include both gene-level and sample-level covariates. The inclusion of observed and unobserved sample-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects, such as gene length and GC-content effects. See a schematic view of the ZINB-WaVE model in Figure \@ref(fig:zinbschema). For greated detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
+Here, we perform dimensionality reduction using the Bioconductor R package `zinbwave`, which fits a zero-inflated negative binomial model (ZINB-WaVE) that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a sample-level intercept, which serves as a global-scaling normalization factor. The user can also include both gene-level and sample-level covariates. The inclusion of observed and unobserved sample-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects, such as gene length and GC-content effects. A schematic view of the ZINB-WaVE model is provided in Figure \@ref(fig:zinbschema). For greated detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
 
-```{r zinbschema, echo=FALSE, out.width='95%', fig.cap="Schematic view of the ZINB-WaVE model. This figure has been reproduced with kind permission from (Risso et al. 2017)."}
+```{r zinbschema, echo=FALSE, out.width='95%', fig.cap="Schematic view of the ZINB-WaVE model. This figure was reproduced with kind permission from (Risso et al. 2017)."}
 knitr::include_graphics('zinb_schema.pdf')
 ```
 
@@ -294,7 +295,7 @@ par(mfrow = c(1,1))
 
 ### Dimensionality reduction
 
-The `zinbDimRed` function can also be used to perform dimensionality reduction, where in this workflow the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).
+The `zinbDimRed` function can also be used to perform dimensionality reduction, where in this workflow the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results in a scatterplot with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).
 
 ```{r mdsW, fig.cap="MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by original published clusters."}
 W <- colData(se)[, grepl('^W', colnames(colData(se)))]
