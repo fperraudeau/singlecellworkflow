@@ -427,6 +427,8 @@ lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1")
 lineages <- getCurves(lineages)
 ```
 
+[SD: Mention reason for having these two figures. What do colors correspond to in second figure? Match notation for dimensions (along diagonal) in the two figures.]
+
 ```{r curves, fig.cap="Cells color-coded by cluster in a 4-dimensional space with smooth curves representing each inferred lineage."}
 pairs(lineages, type='curves', pal[primaryClusterNamed(ceObj)])
 ```
@@ -468,6 +470,7 @@ gam.pval <- apply(y,1,function(z){
 })
 ```
 
+[SD: Add figure caption.]
 
 ```{r heatmapsignificant}
 topgenes <- names(sort(gam.pval, decreasing = FALSE))[1:100]
