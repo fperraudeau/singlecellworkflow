@@ -316,6 +316,11 @@ legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
 
 The next step of the workflow is to cluster the cells according to the low-dimensional matrix `W` computed in the previous step. We use the resampling-based sequential ensemble clustering (RSEC) frameworkd implemented in the `RSEC` function from the Bioconductor R package `clusterExperiment`. Specifically, given a set of user-supplied based clustering algorithms and associated tuning parameters (e.g., _k_-means, with a range of values for _k_), RSEC generates a collection of candidate clusterings by resampling cells and using a sequential tight clustering procedure as in Tseng and Wong (2005)[@Tseng2005]. A consensus clustering is obtained based on the levels of co-clustering of samples across the candidate clusterings. The consensus clustering is further condensed by merging similar clusters which is done by creating a hierarchy of clusters, working up the tree, and testing for differential expression between sister nodes, with nodes of insufficient DE collapsed. As in supervised learning, resampling greatly improves the stability of clusters and considering an ensemble of methods and tuning parameters allows us to capitalize on the different strengths of the base algorithms and avoid the subjective selection of tuning parameters. 
 
+
+EP: Added the below paragraph
+
+The defaults in `RSEC` are designed for input data that is the actual (normalized) count data. We are going to apply it instead to the `W` matrix of the previous step, for which we make a separate `SummarizedExperiment` object from `W`. For this reason we will choose to not use certain options in `RSEC`. In particular, we will not use the default dimensionality reduction step provided by `RSEC` since our input `W` is already in a reduced dimensional space. Specifically, `RSEC` offers a dimensionality reduction option for the input to both the clustering routines (`dimReduce`) and to the construction of the hiearchy between the clusters (`dendroReduce`). We will also skip the option to merge our clusters based on the amount of differential gene expression between clusters since our input data is `W` and not the actual individual gene expression values. 
+  
 ```{r rsec_50}
 fn <- '../data/RSEC_W_combineMinSize10.rda'
 if (runClus & !file.exists(fn)){
@@ -325,6 +330,7 @@ if (runClus & !file.exists(fn)){
                                   betas = 0.8, dimReduce="none",
                 clusterFunction = "hierarchical01", minSizes=1,
                 ncores = NCORES, isCount=FALSE,
+				dendroReduce="none",dendroNDims=NA,
                 subsampleArgs = list(resamp.num=100,
                                      clusterFunction="kmeans",
                                      clusterArgs=list(nstart=10)),
