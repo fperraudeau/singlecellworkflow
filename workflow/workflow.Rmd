@@ -63,8 +63,6 @@ if (mysystem == 'Darwin'){
 }
 ```
 
-EAP: small request. Can everyone put a line between the beginning of a r chunk and text? It makes it nicely formated for my text editor. 
-
 # Introduction
 
 Single-cell RNA sequencing (scRNA-seq) is a powerful and promising class of high-throughput assays that enable researchers to measure genome-wide transcription levels at the resolution of single cells. To properly account for features specific to scRNA-seq, such as zero inflation and high levels of technical noise, several novel statistical methods have been developed to tackle questions that include normalization, dimensionality reduction, clustering, the inference of cell lineages and pseudotimes, and differential expression (DE) analysis. While each individual method is useful on its own for addressing a specific question, there is an increasing need for workflows that integrate these tools to yield a seamless scRNA-seq data analysis pipeline. This is all the more true, with novel sequencing technologies that allow an increasing number of cells to be sequenced in each run. For example, the Chromium Single Cell 3' Solution was recently used to sequence and profile about 1.3 million cells from embryonic mouse brains. 
@@ -204,6 +202,7 @@ load("../data/oe_se_1000Var.rda")
 ## Dataset structure
 
 Overall, after the pre-processing steps, our dataset has 1,000 genes and 747 cells.
+
 ```{r}
 core
 ```
@@ -315,9 +314,7 @@ legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
 
 ## Cell clustering: RSEC
 
-The next step of the workflow is to cluster the cells according to the low-dimensional matrix `W` computed in the previous step. We use the resampling-based sequential ensemble clustering (RSEC) frameworkd implemented in the `RSEC` function from the Bioconductor R package `clusterExperiment`. Specifically, given a set of user-supplied based clustering algorithms and associated tuning parameters (e.g., _k_-means, with a range of values for _k_), RSEC generates a collection of candidate clusterings by resampling cells and using a sequential tight clustering procedure as in Tseng and Wong (2005)[@Tseng2005]. A consensus clustering is obtained based on the co-clustering matrix and non-differential clusters are then merged by creating a hierarchy of clusters, working up the tree, testing for differential expression between sister nodes, and collapsing nodes with insufficient DE. As in supervised learning, resampling greatly improves the stability of clusters and considering an ensemble of methods and tuning parameters allows us to capitalize on the different strengths of the base algorithms and avoid the subjective selection of tuning parameters. 
-
-Elizabeth, would you like to more details on the rational and arguments of the different functions?
+The next step of the workflow is to cluster the cells according to the low-dimensional matrix `W` computed in the previous step. We use the resampling-based sequential ensemble clustering (RSEC) frameworkd implemented in the `RSEC` function from the Bioconductor R package `clusterExperiment`. Specifically, given a set of user-supplied based clustering algorithms and associated tuning parameters (e.g., _k_-means, with a range of values for _k_), RSEC generates a collection of candidate clusterings by resampling cells and using a sequential tight clustering procedure as in Tseng and Wong (2005)[@Tseng2005]. A consensus clustering is obtained based on the levels of co-clustering of samples across the candidate clusterings. The consensus clustering is further condensed by merging similar clusters which is done by creating a hierarchy of clusters, working up the tree, and testing for differential expression between sister nodes, with nodes of insufficient DE collapsed. As in supervised learning, resampling greatly improves the stability of clusters and considering an ensemble of methods and tuning parameters allows us to capitalize on the different strengths of the base algorithms and avoid the subjective selection of tuning parameters. 
 
 ```{r rsec_50}
 fn <- '../data/RSEC_W_combineMinSize10.rda'
@@ -359,6 +356,19 @@ The distribution of cells across the consensus clusters is as follows:
 table(primaryClusterNamed(ceObj))
 ```
 
+EP: the label `clusterLabels` for the original labels might do better to be changed to `publishedClusters` so that it is more informative. Also, we don't do a direct comparison of the `publishedClusters`
+ to the found clusters -- is that relevant? If so, it is probably better to add the published clusters via `addClusters` so it is easier to treat them like clusters. This is perhaps useful for a workflow since this is a common task that `clusterExperiment` makes easy. Here is code that does this:
+ 
+ ```{r addPublishedClusters}
+ #delete this chunk if not of interest
+ #if keep, need to choose if do both figures and add figure caption 
+ ceObj<-addClusters(ceObj,colData(ceObj)$clusterLabels,clusterLabel="publishedClusters")
+ plotClusters(ceObj, whichClusters=c("mergeClusters","combineMany","publishedClusters"))
+ plotBarplot(ceObj,whichClusters=c("mergeClusters","publishedClusters")) 
+ ```
+ 
+ EP: If we do the above code, then the `plotHeatmap` command below should be modified to have the `publishedClusters` under the `whichClusters` argument. 
+
 Figure \@ref(fig:heatmapsClusters) displays a heatmap of the normalized expression measures for the 1,000 most variable genes, where cells are clustered according to the RSEC consensus.
 
 ```{r heatmapsClusters, fig.cap="Heatmap of the normalized expression measures for the 1,000 most variable genes, where rows correspond to genes and columns to cells ordered by RSEC clusters."}
@@ -378,6 +388,8 @@ plotHeatmap(ceObj, visualizeData = assays(se)$normalizedValues,
             clusterLegend = metaColors, annLegend = FALSE, main = '')
 ```
 
+
+ 
 Finally, we can visualize the cells in a two-dimensional space using the MDS of the low-dimensional matrix `W` and coloring the cells according to their newly-found RSEC clusters (Figure \@ref(fig:mdsWce)); this is anologous to Figure \@ref(fig:mdsW) for the original published clusters.
 
 ```{r mdsWce, fig.cap="MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by RSEC clusters."}
@@ -457,7 +469,7 @@ lineages
 
 After assigning the cells to lineages and ordering them within lineages, we are interested in finding genes that have non-constant expression patterns over pseudotime. We can see global trends in expression by subsetting our original dataset to the most variable genes and displaying their expression values in a heatmap, with cells ordered by pseudotime.
 
-More formally, we are interested in testing for variable expression over pseudotime. A general additive model (GAM) is a flexible, nonlinear way to model the relationship between a gene's normalized expression measures and pseudotime. We implemented this model for each gene and show the top 100 genes by p-value in the heatmap below.
+More formally, we are interested in testing for variable expression over pseudotime. We do this by fitting a loess curve to the data which is a flexible, nonlinear way to model the relationship between a gene's normalized expression measures and pseudotime. We then can test the null hypothesis of no change over time using the `gam` package. We implemented this model for each gene and show the top 100 genes by p-value in the heatmap below.
 
 ```{r fitgam}
 t <- pseudotime(lineages)[,1]
