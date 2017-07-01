@@ -69,6 +69,9 @@ if (mysystem == 'Darwin'){
 
 - solve loading packages issues (DR),
 - versions of packages we want to use in develop branches and change functions in text accordingly (EP and DR),
+- update clustering section with new clusterExperiment functions (EP),
+- add details in section preprocessing (DR),
+- address Sandrine's comments in sections slingshot and de (KS),
 - clean up singlecellworkflow package (FP),
 - update NAMESPACE and DESCRIPTION (FP),
 - install and run package using cache instead of saved files for zinbwave and clusterExperiment and making sure we can build the vignette using R 3.4 and bioc-devel 3.6 (all?),
@@ -165,11 +168,11 @@ m <- match(colnames(E), clusterLabels[, 1])
 # Create metadata data.frame
 metadata <- data.frame("Experiment" = bio,
                        "Batch" = batch,
-                       "clusterLabels" = clusterLabels[m,2],
+                       "publishedClusters" = clusterLabels[m,2],
                        qc)
 
 # Symbol for cells not assigned to a lineage in original data
-metadata$clusterLabels[is.na(metadata$clusterLabels)] <- -2
+metadata$publishedClusters[is.na(metadata$publishedClusters)] <- -2
 
 se <- SummarizedExperiment(assays = list(counts = E),
                            colData = metadata)
@@ -210,7 +213,9 @@ core <- se[names(vars)[1:1000],]
 
 ```{r}
 load("../data/oe_se_1000Var.rda")
+colnames(colData(core))[colnames(colData(core)) == 'clusterLabels'] = 'publishedClusters' 
 ```
+[FP: delete this chunk once we can load scone]
 
 
 ## Dataset structure
@@ -234,18 +239,18 @@ table(batch)
 In the original work [@Fletcher2017], cells were clustered into 14 different clusters, with 151 cells not assigned to any cluster (i.e., cluster label of `-2`). 
 
 ```{r original}
-clus.labels <- colData(core)[, "clusterLabels"]
+publishedClusters <- colData(core)[, "publishedClusters"]
 col_clus <- c("transparent", brewer.pal(12, "Set3"), brewer.pal(8, "Set2"))
-col_clus <- col_clus[1:length(unique(clus.labels))]
-names(col_clus) <- sort(unique(clus.labels))
-table(clus.labels)
+col_clus <- col_clus[1:length(unique(publishedClusters))]
+names(col_clus) <- sort(unique(publishedClusters))
+table(publishedClusters)
 ```
 
 Note that there is partial nesting of batches within clusters (i.e., cell type), which could be problematic when correcting for batch effects in the dimensionality reduction step.
 
 ```{r clustbatch}
 table(data.frame(batch = as.vector(batch),
-                 cluster = clus.labels))
+                 cluster = publishedClusters))
 ```
 
 ## Normalization and dimensionality reduction: ZINB-WaVE
@@ -304,7 +309,7 @@ The principal component analysis (PCA) of the normalized values shows that, as e
 pca <- prcomp(t(norm))
 par(mfrow = c(1,2))
 plot(pca$x, col = col_batch[batch], pch = 20, main = '')
-plot(pca$x, col = col_clus[as.character(clus.labels)], pch = 20, main = '')
+plot(pca$x, col = col_clus[as.character(publishedClusters)], pch = 20, main = '')
 ```
 
 ```{r,echo=FALSE}
@@ -320,7 +325,7 @@ W <- colData(se)[, grepl('^W', colnames(colData(se)))]
 W <- as.matrix(W)
 d <- dist(W)
 fit <- cmdscale(d, eig = TRUE, k = 2)
-plot(fit$points, col = col_clus[as.character(clus.labels)], main = '',
+plot(fit$points, col = col_clus[as.character(publishedClusters)], main = '',
      pch = 20, xlab = 'Component 1', ylab = 'Component 2')
 legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
        fill = unique(col_clus), title = 'Sample')
@@ -352,6 +357,7 @@ if (runClus & !file.exists(fn)){
   save(ceObj, file = fn)
 }else{
   load(fn)
+  colnames(colData(ceObj))[colnames(colData(ceObj)) == 'clusterLabels'] = 'publishedClusters'
 }
 ```
 
@@ -369,46 +375,57 @@ The `plotCoClustering` function produces a heatmap of the co-clustering matrix, 
 plotCoClustering(ceObj)
 ```
 
-The distribution of cells across the consensus clusters is as follows:
+The distribution of cells across the consensus clusters can be visualized in Figure \@ref(fig:barplotOurs)) and is as follows:
 
 ```{r tableclust}
 table(primaryClusterNamed(ceObj))
 ```
 
+```{r barplotOurs, fig.cap="Barplot of number of cells per cluster found using our workflow."}
+plotBarplot(ceObj) 
+```
+
+[FP: Should we add here the short paragraph Elizabeth was talking about to compare our found clusters versus the original published clusters?]
+
+```{r addPublishedClusters, fig.cap="Barplot of number of cells per cluster in original published clusters."}
+ceObj<-addClusters(ceObj, colData(ceObj)$publishedClusters, 
+                   clusterLabel = "publishedClusters")
+plotBarplot(ceObj,whichClusters=c("mergeClusters","publishedClusters")) 
+```
+
 EP: the label `clusterLabels` for the original labels might do better to be changed to `publishedClusters` so that it is more informative. Also, we don't do a direct comparison of the `publishedClusters`
  to the found clusters -- is that relevant? If so, it is probably better to add the published clusters via `addClusters` so it is easier to treat them like clusters. This is perhaps useful for a workflow since this is a common task that `clusterExperiment` makes easy. Here is code that does this:
  
- ```{r addPublishedClusters}
- #delete this chunk if not of interest
- #if keep, need to choose if do both figures and add figure caption 
- ceObj<-addClusters(ceObj,colData(ceObj)$clusterLabels,clusterLabel="publishedClusters")
- plotClusters(ceObj, whichClusters=c("mergeClusters","combineMany","publishedClusters"))
- plotBarplot(ceObj,whichClusters=c("mergeClusters","publishedClusters")) 
- ```
+[FP: after the modifications, do we still need function addCluters? If we want to illustrate that clusterExperiment package has a convenient function to add clusters to a clusterExperiment object, we can keep it and say that here it is not necessary.]
+
  
- EP: If we do the above code, then the `plotHeatmap` command below should be modified to have the `publishedClusters` under the `whichClusters` argument. 
+```{r comparePublished, fig.cap="Comparison between the clusters found using our workflow and original published clusters."}
+plotClusters(ceObj, whichClusters=c("mergeClusters","combineMany","publishedClusters"))
+```
+ 
+[EP: If we do the above code, then the `plotHeatmap` command below should be modified to have the `publishedClusters` under the `whichClusters` argument. ]
+
+[FP: Elizabeth, I changed the `clusterLabels` to `publishedClusters`, more informative indeed. Maybe, we could add the plotClusters to compare the published and our own clusters and the plotBarplot to illustrate our previous call to function table()? I modified the code accordingly. If you don't like it, feel free to change, it is just a proposition.]
 
 Figure \@ref(fig:heatmapsClusters) displays a heatmap of the normalized expression measures for the 1,000 most variable genes, where cells are clustered according to the RSEC consensus.
 
 ```{r heatmapsClusters, fig.cap="Heatmap of the normalized expression measures for the 1,000 most variable genes, where rows correspond to genes and columns to cells ordered by RSEC clusters."}
 # Set colors for cell clusterings
-colData(ceObj)$clusterLabels <- as.factor(colData(ceObj)$clusterLabels)
-origClusterColors <- bigPalette[1:nlevels(colData(ceObj)$clusterLabels)]
+colData(ceObj)$publishedClusters <- as.factor(colData(ceObj)$publishedClusters)
+origClusterColors <- bigPalette[1:nlevels(colData(ceObj)$publishedClusters)]
 experimentColors <- bigPalette[1:nlevels(colData(ceObj)$Experiment)]
 batchColors <- bigPalette[1:nlevels(colData(ceObj)$Batch)]
 metaColors <- list("Experiment" = experimentColors,
                    "Batch" = batchColors,
-                   "clusterLabels" = origClusterColors)
+                   "publishedClusters" = origClusterColors)
 
 plotHeatmap(ceObj, visualizeData = assays(se)$normalizedValues,
             whichClusters = "primary", clusterFeaturesData = "all",
             clusterSamplesData = "dendrogramValue", breaks = 0.99,
-            sampleData = c("clusterLabels", "Batch", "Experiment"),
+            sampleData = c("publishedClusters", "Batch", "Experiment"),
             clusterLegend = metaColors, annLegend = FALSE, main = '')
 ```
 
-
- 
 Finally, we can visualize the cells in a two-dimensional space using the MDS of the low-dimensional matrix `W` and coloring the cells according to their newly-found RSEC clusters (Figure \@ref(fig:mdsWce)); this is anologous to Figure \@ref(fig:mdsW) for the original published clusters.
 
 ```{r mdsWce, fig.cap="MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by RSEC clusters."}
@@ -431,7 +448,7 @@ The two steps of the Slingshot algorithm are implemented in the functions `getLi
 From the original published work, we know that the start cluster should correspond to HBCs and the end clusters to MV, mOSN, and mSUS cells. Additionally, we know that GBCs should be at a junction before the differentiation between MV and mOSN cells (Figure \@ref(fig:stemcelldiff)). The correspondance between the clusters we found here and the original clusters is as follows.
 
 ```{r tabagain}
-table(data.frame(original = clus.labels, ours = primaryClusterNamed(ceObj)))
+table(data.frame(original = publishedClusters, ours = primaryClusterNamed(ceObj)))
 ```
 
 Cluster name | Description | Color | Correspondence
