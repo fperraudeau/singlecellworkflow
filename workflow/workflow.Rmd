@@ -14,7 +14,7 @@ author:
     
 abstract: Novel single-cell transcriptome sequencing assays allow researchers to measure gene expression levels at the resolution of single cells and offer the unprecendented opportunity to investigate at the molecular level fundamental biological questions such as stem cell differentiation or the discovery and characterization of rare cell types. However, such assays raise challenging statistical and computational questions and require the development of novel methodology and software. Using stem cell differentiation in the mouse olfactory epithelium as a case study, this integrated workflow provides a step-by-step tutorial to the methodology and associated software for the following four main tasks:(1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and pseudotimes; and (4) differential expression analysis along lineages. 
 
-keywords: single-cell, single-cell genomics, RNA-seq, gene expression, zero inflation, normalization, dimensionality reduction, clustering, lineage inference, differential expression, workflow, R, Bioconductor
+keywords: single-cell, RNA-seq, normalization, dimensionality reduction, clustering, lineage inference, differential expression, workflow
 
 bibliography: ref.bib
 
@@ -63,7 +63,7 @@ if (mysystem == 'Darwin'){
 }
 ```
 
-[FP: we need to have only 8 keywords, which ones do you prefer?]
+[FP: we need to have only 8 keywords, which ones do you prefer? SD: I selected 8, please check.]
 
 [FP: todo before to convert to latex: 
 
@@ -295,17 +295,17 @@ norm[1:3,1:3]
 
 As expected, the normalized values no longer exhibit batch effects (Figure \@ref(fig:boxplotNorm)).
 
-```{r boxplotNorm, fig.cap="Boxplots of normalized expression measures, color-coded by batch."}
+```{r boxplotNorm, fig.cap="Boxplots of normalized expression measures (deviance residuals), color-coded by batch."}
 norm_order <- norm[, order(as.numeric(batch))]
 col_order <- col_batch[batch[order(as.numeric(batch))]]
 boxplot(norm_order, col = col_order, staplewex = 0, outline = 0,
-        border = col_order, xaxt = 'n')
+        border = col_order, xaxt = 'n', ylab='Expression measure')
 abline(h=0)
 ```
 
 The principal component analysis (PCA) of the normalized values shows that, as expected, cells do not cluster by batch but by the original clusters (Figure \@ref(fig:pcanorm)). Overall, it seems that normalization was effective at removing batch effects.
 
-```{r pcanorm, fig.cap="PCA of normalized expression measures, where each point represents a cell. In the left panel, cells are color-coded by batch. In the right panel, cells are color-coded by original published clusters."}
+```{r pcanorm, fig.cap="PCA of normalized expression measures, where each point represents a cell. In the left panel, cells are color-coded by batch. In the right panel, cells are color-coded by original published clustering."}
 pca <- prcomp(t(norm))
 par(mfrow = c(1,2))
 plot(pca$x, col = col_batch[batch], pch = 20, main = '')
@@ -320,7 +320,7 @@ par(mfrow = c(1,1))
 
 The `zinbDimRed` function can also be used to perform dimensionality reduction, where, in this workflow, the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results in a scatterplot with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).
 
-```{r mdsW, fig.cap="MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by original published clusters."}
+```{r mdsW, fig.cap="MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by original published clustering."}
 W <- colData(se)[, grepl('^W', colnames(colData(se)))]
 W <- as.matrix(W)
 d <- dist(W)
@@ -365,7 +365,7 @@ FP: Same comment as Davide's comment for zinbwave. We should remove the if file 
 
 The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examineCombineMany)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap accross rows. The first row correspond to a consensus clustering across all candidate clusterings.
 
-```{r examineCombineMany, fig.cap="Clusters found using the function RSEC from the clusterExperiment package."}
+```{r examineCombineMany, fig.cap="Candidate clusterings found using the function RSEC from the clusterExperiment package."}
 plotClusters(ceObj, colPalette = c(bigPalette, rainbow(199)))
 ```
 
@@ -381,13 +381,13 @@ The distribution of cells across the consensus clusters can be visualized in Fig
 table(primaryClusterNamed(ceObj))
 ```
 
-```{r barplotOurs, fig.cap="Barplot of number of cells per cluster found using our workflow."}
+```{r barplotOurs, fig.cap="Barplot of number of cells per cluster, for our workflow's clusterint."}
 plotBarplot(ceObj) 
 ```
 
 [FP: Should we add here the short paragraph Elizabeth was talking about to compare our found clusters versus the original published clusters?]
 
-```{r addPublishedClusters, fig.cap="Barplot of number of cells per cluster in original published clusters."}
+```{r addPublishedClusters, fig.cap="Barplot of number of cells per cluster, for original published clustering."}
 ceObj<-addClusters(ceObj, colData(ceObj)$publishedClusters, 
                    clusterLabel = "publishedClusters")
 plotBarplot(ceObj,whichClusters=c("mergeClusters","publishedClusters")) 
@@ -399,7 +399,7 @@ EP: the label `clusterLabels` for the original labels might do better to be chan
 [FP: after the modifications, do we still need function addCluters? If we want to illustrate that clusterExperiment package has a convenient function to add clusters to a clusterExperiment object, we can keep it and say that here it is not necessary.]
 
  
-```{r comparePublished, fig.cap="Comparison between the clusters found using our workflow and original published clusters."}
+```{r comparePublished, fig.cap="Comparison between the clustering found using our workflow and the original published clustering."}
 plotClusters(ceObj, whichClusters=c("mergeClusters","combineMany","publishedClusters"))
 ```
  
@@ -477,11 +477,11 @@ lineages <- getCurves(lineages)
 
 [SD: Mention reason for having these two figures, otherwise drop second figure. If keep second figure: Move it first, match notation for dimensions (along diagonal) in the two figures, and provide color legend for second figure.]
 
-```{r curves, fig.cap="Cells color-coded by cluster in a 4-dimensional space with smooth curves representing each inferred lineage."}
+```{r curves, fig.cap="Cells color-coded by cluster in a 4-dimensional MDS space with smooth curves representing each inferred lineage."}
 pairs(lineages, type='curves', pal[primaryClusterNamed(ceObj)])
 ```
 
-```{r tree, fig.cap="Cells color-coded by cluster in a 4-dimensional space with connecting lines between cluster centers representing the inferred structure."}
+```{r tree, fig.cap="Cells color-coded by cluster in a 4-dimensional MDS space with connecting lines between cluster centers representing the inferred structure."}
 pairs(lineages, type='lineages', col = pal[primaryClusterNamed(ceObj)])
 ```
 
