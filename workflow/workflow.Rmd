@@ -63,6 +63,24 @@ if (mysystem == 'Darwin'){
 }
 ```
 
+[FP: we need to have only 8 keywords, which ones do you prefer?]
+
+[FP: todo before to convert to latex: 
+
+- solve loading packages issues (DR),
+- versions of packages we want to use in develop branches and change functions in text accordingly (EP and DR),
+- clean up singlecellworkflow package (FP),
+- update NAMESPACE and DESCRIPTION (FP),
+- install and run package using cache instead of saved files for zinbwave and clusterExperiment and making sure we can build the vignette using R 3.4 and bioc-devel 3.6 (all?),
+- make singlecellworkflow package public (FP).]
+
+[FP: todo after converting to latex (FP): 
+
+- add space between paragraphs, 
+- check uniformity first/last names in references, 
+- add back space after word task in abstract, 
+- submit.]
+
 # Introduction
 
 Single-cell RNA sequencing (scRNA-seq) is a powerful and promising class of high-throughput assays that enable researchers to measure genome-wide transcription levels at the resolution of single cells. To properly account for features specific to scRNA-seq, such as zero inflation and high levels of technical noise, several novel statistical methods have been developed to tackle questions that include normalization, dimensionality reduction, clustering, the inference of cell lineages and pseudotimes, and differential expression (DE) analysis. While each individual method is useful on its own for addressing a specific question, there is an increasing need for workflows that integrate these tools to yield a seamless scRNA-seq data analysis pipeline. This is all the more true, with novel sequencing technologies that allow an increasing number of cells to be sequenced in each run. For example, the Chromium Single Cell 3' Solution was recently used to sequence and profile about 1.3 million cells from embryonic mouse brains. 
@@ -75,8 +93,6 @@ Here, we propose an integrated workflow for dowstream analysis, with the followi
 knitr::include_graphics('schema_workflow.png')
 ```
 
-[SD: Fig. 1: For DE, remove mention to edgeR.]
-
 # Analysis of olfactory stem cell differentiation using scRNA-seq data
 
 ## Overview
@@ -87,11 +103,9 @@ knitr::include_graphics('stemcelldiff_Fletcher2017_2e.png')
 
 This workflow is illustrated using data from a scRNA-seq study of stem cell differentiation in the mouse olfactory epithelium (OE) [@Fletcher2017]. The olfactory epithelium contains mature olfactory sensory neurons that are continuously renewed in the epithelium via neurogenesis through the differentiation of globose basal cells (GBCs), which are the actively proliferating cells in the epithelium. When a severe injury to the entire tissue happens, the olfactory epithelium can regenerate from normally quiescent stem cells called horizontal basal cells (HBCs), which become activated to differentiate and reconstitute all major cell types in the epithelium.   
 
-The scRNA-seq dataset we use as a case study was generated to study the differentitation of HBC stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. The expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using a statistical analysis pipeline analogous to that in the present workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017],  [@Risso2017], and [@Street2017].
+The scRNA-seq dataset we use as a case study was generated to study the differentitation of HBC stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. The expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using a statistical analysis pipeline analogous to that in the present workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017; @Risso2017; @Street2017].
 
 It was found that the first major bifurcation in the HBC lineage trajectory occurs prior to cell division, producing either mature sustentacular (mSUS) cells or GBCs. Then, the GBC lineage, in turn, branches off to give rise to mature olfactory sensory neurons (mOSN), microvillous (MV) cells, and cells of the Bowman gland (Figure \@ref(fig:stemcelldiff)). In this workflow, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes x cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
-
-FP: ask Russell if we can use the Figure \@ref(fig:stemcelldiff) here.
 
 ## Pre-processing
 
@@ -236,9 +250,9 @@ table(data.frame(batch = as.vector(batch),
 
 ## Normalization and dimensionality reduction: ZINB-WaVE
 
-In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime ordering, and the identification of DE genes. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low-dimensional signal of interest [@Peer2017] [@Risso2017][@Pierson2015].
+In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime ordering, and the identification of DE genes. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low-dimensional signal of interest [@Peer2017; @Risso2017; @Pierson2015].
 
-Here, we perform dimensionality reduction using the zero-inflated negative binomial-based wanted variation extraction (ZINB-WaVE) method implemented in the Bioconductor R package `zinbwave`. The method fits a ZINB model that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a sample-level intercept, which serves as a global-scaling normalization factor. The user can also include both gene-level and sample-level covariates. The inclusion of observed and unobserved sample-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects (e.g., gene length and GC-content effects). A schematic view of the ZINB-WaVE model is provided in Figure \@ref(fig:zinbschema). For greated detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
+Here, we perform dimensionality reduction using the zero-inflated negative binomial-based wanted variation extraction (ZINB-WaVE) method implemented in the Bioconductor R package `zinbwave`. The method fits a ZINB model that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a sample-level intercept, which serves as a global-scaling normalization factor. The user can also include both gene-level and sample-level covariates. The inclusion of observed and unobserved sample-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects (e.g., gene length and GC-content effects). A schematic view of the ZINB-WaVE model is provided in Figure \@ref(fig:zinbschema). For greater detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
 
 ```{r zinbschema, echo=FALSE, out.width='95%', fig.cap="Schematic view of the ZINB-WaVE model. This figure was reproduced with kind permission from Risso et al. (2017)."}
 knitr::include_graphics('zinb_schema.pdf')
@@ -314,9 +328,7 @@ legend(x = 'bottomright', legend = unique(names(col_clus)), cex = .5,
 
 ## Cell clustering: RSEC
 
-The next step of the workflow is to cluster the cells according to the low-dimensional matrix `W` computed in the previous step. We use the resampling-based sequential ensemble clustering (RSEC) frameworkd implemented in the `RSEC` function from the Bioconductor R package `clusterExperiment`. Specifically, given a set of user-supplied base clustering algorithms and associated tuning parameters (e.g., _k_-means, with a range of values for _k_), RSEC generates a collection of candidate clusterings, with the option of resampling cells and using a sequential tight clustering procedure as in Tseng and Wong (2005)[@Tseng2005]. A consensus clustering is obtained based on the levels of co-clustering of samples across the candidate clusterings. The consensus clustering is further condensed by merging similar clusters which is done by creating a hierarchy of clusters, working up the tree, and testing for differential expression between sister nodes, with nodes of insufficient DE collapsed. As in supervised learning, resampling greatly improves the stability of clusters and considering an ensemble of methods and tuning parameters allows us to capitalize on the different strengths of the base algorithms and avoid the subjective selection of tuning parameters. 
-
-EP: Added the below paragraph
+The next step of the workflow is to cluster the cells according to the low-dimensional matrix `W` computed in the previous step. We use the resampling-based sequential ensemble clustering (RSEC) frameworkd implemented in the `RSEC` function from the Bioconductor R package `clusterExperiment`. Specifically, given a set of user-supplied base clustering algorithms and associated tuning parameters (e.g., _k_-means, with a range of values for _k_), RSEC generates a collection of candidate clusterings, with the option of resampling cells and using a sequential tight clustering procedure as in [@Tseng2005]. A consensus clustering is obtained based on the levels of co-clustering of samples across the candidate clusterings. The consensus clustering is further condensed by merging similar clusters which is done by creating a hierarchy of clusters, working up the tree, and testing for differential expression between sister nodes, with nodes of insufficient DE collapsed. As in supervised learning, resampling greatly improves the stability of clusters and considering an ensemble of methods and tuning parameters allows us to capitalize on the different strengths of the base algorithms and avoid the subjective selection of tuning parameters. 
 
 Note that the defaults in `RSEC` are designed for input data that are the actual (normalized) counts. Here, we are applying `RSEC` instead to the low-dimensional `W` matrix of the previous step, for which we make a separate `SummarizedExperiment` object. For this reason, we choose to not use certain options in `RSEC`. In particular, we do not use the default dimensionality reduction step, since our input `W` is already in a space of reduced dimension. Specifically, `RSEC` offers a dimensionality reduction option for the input to both the clustering routines (`dimReduce`) and the construction of the hiearchy between the clusters (`dendroReduce`). We also skip the option to merge our clusters based on the amount of differential gene expression between clusters since our input data is `W` and not the actual individual gene expression values. 
   
@@ -342,6 +354,8 @@ if (runClus & !file.exists(fn)){
   load(fn)
 }
 ```
+
+FP: Same comment as Davide's comment for zinbwave. We should remove the if file exists and rely on the cache.
 
 The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examineCombineMany)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap accross rows. The first row correspond to a consensus clustering across all candidate clusterings.
 
@@ -429,7 +443,7 @@ c4 | mOSN | orange | original 9, 12
 c5 | Immature Neuron | purple | original 10, 14
 c6 | MV | brown | original 15
 
-To infer lineages and pseudotimes, we use the package `slingshot`, with input the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_= [SD: Add values of _k_ that were considered.]). Here, we use the unsupervised version of slingshot, where we only provide the identity of the start cluster but not of the end clusters. This implementation recovers the lineages found in the published work (Figures \@ref(fig:curves) and \@ref(fig:tree)).
+To infer lineages and pseudotimes, we use the package `slingshot`, with input the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of slingshot, where we only provide the identity of the start cluster but not of the end clusters. This implementation recovers the lineages found in the published work (Figures \@ref(fig:curves) and \@ref(fig:tree)).
 
 
 ```{r}
@@ -517,7 +531,7 @@ This section will be generated by the Editorial Office before publication. Autho
 4. Link to archived source code as at time of publication (*F1000Research* TO GENERATE)
 5. Software license (AUTHOR TO PROVIDE; required)
 
-The four packages used in the workflow (scone, zinbwave, clusterExperiment, and slingshot) are Bioconductor packages and are available on github at respectively https://github.com/YosefLab/scone, https://github.com/drisso/zinbwave, https://github.com/epurdom/clusterExperiment, and https://github.com/kstreet13/slingshot. The source code for this package can be found at https://github.com/fperraudeau/singlecellworkflow under license XXX. 
+The source code for this package can be found at https://github.com/fperraudeau/singlecellworkflow. The four packages used in the workflow (scone, zinbwave, clusterExperiment, and slingshot) are Bioconductor packages and are available on github at respectively https://github.com/YosefLab/scone, https://github.com/drisso/zinbwave, https://github.com/epurdom/clusterExperiment, and https://github.com/kstreet13/slingshot. 
 
 ```{r}
 sessionInfo()
