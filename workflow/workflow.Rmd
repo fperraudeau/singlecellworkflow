@@ -109,9 +109,7 @@ Note that in order to successfully run the workflow, we need the devel versions
 of the Bioconductor packages `scone (>=1.1.2)`, `zinbwave (>=0.99.5)`, and `clusterExperiment (>=1.3.2)` [DR: Elizabeth, please check!]. We recommend running Bioconductor 3.6 (currently the devel version; see https://www.bioconductor.org/developers/how-to/useDevel/).
 
 ```{r parallel, echo=FALSE}
-runZinb <- TRUE
-runClus <- TRUE
-NCORES <- 6
+NCORES <- 2
 mysystem = Sys.info()[["sysname"]]
 if (mysystem == "Darwin"){
   registerDoParallel(NCORES)
@@ -276,7 +274,7 @@ knitr::include_graphics("zinb_schema.pdf")
 As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects. 
 
 ```{r zinb}
-print(system.time(se <- zinbwave(core, K = 50, X = "~ Batch",
+print(system.time(se <- zinbwave(core, K = 40, X = "~ Batch",  
                                  residuals = TRUE,
                                  normalizedValues = TRUE)))
 ```
@@ -286,6 +284,8 @@ print(system.time(se <- zinbwave(core, K = 50, X = "~ Batch",
 The function `zinbwave` returns a `SummarizedExperiment` object that includes normalized expression measures, defined as deviance residuals from the fit of the ZINB-WaVE model with user-supplied gene- and cell-level covariates. Such residuals can be used for visualization purposes (e.g., in heatmaps, boxplots). Note that, in this case, the low-dimensional matrix `W` is not included in the computation of residuals to avoid the removal of the biological signal of interest.
 
 [DR: Fanny, did you figure out why we get infinite values? If not, we need to at least explain why we are doing what we do below.]
+[FP: I tried to play with the epsilon to see if we could get rid of the infinite values in the normalized values. With default epsilon, we have about 40 infinite values, with epsilon 10000, we have about 20. When K = 0, there is no infinite values but the normalized values don't capture as much of biology (looking at the pca with published clusters colors). It seems to me that we get infinite norm. values when the number of parameters to estimate is large. I tried to reduce K to 25 (no infinite but W not as good), 40 (infinite values but W looks ok)... to be continued.]
+
 
 ```{r norm}
 norm <- assays(se)$normalizedValues
