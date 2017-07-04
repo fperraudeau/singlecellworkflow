@@ -36,15 +36,15 @@ knitr::opts_chunk$set(cache=TRUE, error=FALSE, message=FALSE, warning=TRUE)
 knitr::opts_chunk$set(fig.align="center", fig.width=5, fig.height=5)
 ```
 
-[FP: we need to have only 8 keywords, which ones do you prefer? SD: I selected 8, please check.]
-
 [FP: todo before to convert to latex: 
 
 - solve loading packages issues (DR), DONE!
 - versions of packages we want to use in develop branches and change functions in text accordingly (EP and DR), [DR: scone and zinbwave now OK!]
 - update clustering section with new clusterExperiment functions (EP),
-- add details in section preprocessing (DR),
+- add details in section preprocessing (DR), DONE,
 - address Sandrine's comments in sections slingshot and de (KS),
+- try running workflow with more genes (FP),
+- plot gene variance density (FP),
 - clean up singlecellworkflow package (FP),
 - update NAMESPACE and DESCRIPTION (FP),
 - install and run package using cache instead of saved files for zinbwave and clusterExperiment and making sure we can build the vignette using R 3.4 and bioc-devel 3.6 (all?),
@@ -459,7 +459,7 @@ To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS o
 ```{r}
 our_cl <- primaryClusterNamed(ceObj)
 cl = our_cl[our_cl != "-1"]
-pal = pal[names(pal) != '-1']
+pal = pal[names(pal) != "-1"]
 X <- W[our_cl != "-1", ]
 mds <- cmdscale(dist(X), eig = TRUE, k = 4)
 X <- mds$points
@@ -472,7 +472,7 @@ lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1")
 Before fitting the simultaneous principal curves, we check the structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes methods for 3-dimensional visualizations as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
 ```{r tree, fig.cap="Cells color-coded by cluster in a 4-dimensional MDS space with connecting lines between cluster centers representing the inferred structure."}
-pairs(lineages, type='lineages', col = pal[primaryClusterNamed(ceObj)])
+pairs(lineages, type="lineages", col = pal[primaryClusterNamed(ceObj)])
 ```
 
 Having found the global lineage structure, we now construct a set of smooth, branching curves in order to infer the pseudotime variables. Simultaneous principal curves are constructed from the individual cells along each lineage, rather than the cell clusters. This makes them more stable and better suited for assigning cells to lineages. The final curves are shown in Figure \@ref(fig:curves).
@@ -480,7 +480,7 @@ Having found the global lineage structure, we now construct a set of smooth, bra
 ```{r curves, fig.cap="Cells color-coded by cluster in a 4-dimensional MDS space with smooth curves representing each inferred lineage."}
 lineages <- getCurves(lineages)
 
-pairs(lineages, type='curves', col = pal[primaryClusterNamed(ceObj)])
+pairs(lineages, type="curves", col = pal[primaryClusterNamed(ceObj)])
 ```
 
 ```{r lineages}
@@ -493,8 +493,8 @@ In the workflow, we recover a reasonable ordering of the clusters using the unsu
 lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1",
                          end.clus = c("c3", "c6"))
 lineagees <- getCurves(lineages)
-pairs(lineages, type='curves', col = pal[primaryClusterNamed(ceObj)])
-pairs(lineages, type='lineages', col = pal[primaryClusterNamed(ceObj)], show.constraints = TRUE)
+pairs(lineages, type="curves", col = pal[primaryClusterNamed(ceObj)])
+pairs(lineages, type="lineages", col = pal[primaryClusterNamed(ceObj)], show.constraints = TRUE)
 
 lineages
 ```
