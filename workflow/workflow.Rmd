@@ -26,8 +26,8 @@ output: BiocWorkflowTools::f1000_article
 
 
 ```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
-if(packageVersion("zinbwave")<"0.99.5") stop("must have current devel version to avoid bugs")
-if(packageVersion("clusterExperiment")<"1.3.1.9003") stop("must have current develop version to avoid bugs")
+if(packageVersion("zinbwave")<"0.99.6") stop("must have current devel version to avoid bugs")
+if(packageVersion("clusterExperiment")<"1.3.1.9004") stop("must have current develop version to avoid bugs")
 if(packageVersion("scone")<"1.1.2") stop("must have current devel version to avoid bugs")
 
 library(BiocStyle)
@@ -133,7 +133,7 @@ urls = c("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE95601&format=file&fi
          
 if(!file.exists("../data/GSE95601_oeHBCdiff_Cufflinks_eSet.Rda")) {
   download.file(urls[1], "../data/GSE95601_oeHBCdiff_Cufflinks_eSet.Rda.gz")
-  gunzip("../data/GSE95601_oeHBCdiff_Cufflinks_eSet.Rda.gz")
+  R.utils::gunzip("../data/GSE95601_oeHBCdiff_Cufflinks_eSet.Rda.gz")
 }
 
 if(!file.exists("../data/oeHBCdiff_clusterLabels.txt")) {
@@ -313,10 +313,6 @@ pca <- prcomp(t(norm))
 par(mfrow = c(1,2))
 plot(pca$x, col = col_batch[batch], pch = 20, main = "")
 plot(pca$x, col = col_clus[as.character(publishedClusters)], pch = 20, main = "")
-```
-
-```{r,echo=FALSE}
-par(mfrow = c(1,1))
 ```
 
 ### Dimensionality reduction
