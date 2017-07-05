@@ -379,7 +379,7 @@ plotBarplot(ceObj)
 ```{r addPublishedClusters, fig.cap="Barplot of number of cells per cluster, for original published clustering."}
 ceObj<-addClusters(ceObj, colData(ceObj)$publishedClusters, 
                    clusterLabel = "publishedClusters")
-plotBarplot(ceObj,whichClusters=c("mergeClusters","publishedClusters")) 
+plotBarplot(ceObj,whichClusters=c("combineMany","publishedClusters")) 
 ```
 
 EP: the label `clusterLabels` for the original labels might do better to be changed to `publishedClusters` so that it is more informative. Also, we don't do a direct comparison of the `publishedClusters`
