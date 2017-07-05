@@ -211,9 +211,11 @@ se <- se[, mfilt]
 dim(se)
 ```
 
-After sample filtering, we are left with `r ncol(se)` [SD: Check.] good quality cells. 
+After sample filtering, we are left with `r ncol(se)` good quality cells. 
 
 Finally, to speed up computation, we retain only the 1,000 most variable genes. We recommend, however, not to be so stringent in an actual data analysis.
+
+[FP: add an additional comment to justify that we keep only 1000 most variable genes. We can say that it is enough to recover the signal from [@Fletcher2017]. ]
 
 ```{r}
 # Filtering to top 1,000 most variable genes
@@ -251,7 +253,7 @@ names(col_clus) <- sort(unique(publishedClusters))
 table(publishedClusters)
 ```
 
-Note that there is partial nesting of batches within clusters (i.e., cell type), which could be problematic when correcting for batch effects in the dimensionality reduction step below. [SD: Might refer to this issue below again.]
+Note that there is partial nesting of batches within clusters (i.e., cell type), which could be problematic when correcting for batch effects in the dimensionality reduction step below.
 
 ```{r clustbatch}
 table(data.frame(batch = as.vector(batch),
@@ -296,7 +298,7 @@ boxplot(norm_order, col = col_order, staplewex = 0, outline = 0,
 abline(h=0)
 ```
 
-The principal component analysis (PCA) of the normalized values shows that, as expected, cells do not cluster by batch but by the original clusters (Figure \@ref(fig:pcanorm)). Overall, it seems that normalization was effective at removing batch effects. [SD: Maybe here: " without removing biological signal, in spite of the partial nesting of batches within clusters".]
+The principal component analysis (PCA) of the normalized values shows that, as expected, cells do not cluster by batch but by the original clusters (Figure \@ref(fig:pcanorm)). Overall, it seems that normalization was effective at removing batch effects without removing biological signal, in spite of the partial nesting of batches within clusters.
 
 ```{r pcanorm, fig.cap="PCA of normalized expression measures, where each point represents a cell. In the left panel, cells are color-coded by batch. In the right panel, cells are color-coded by original published clustering."}
 pca <- prcomp(t(norm))
