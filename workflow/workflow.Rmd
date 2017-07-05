@@ -284,8 +284,7 @@ print(system.time(se <- zinbwave(core, K = 40, X = "~ Batch",
 The function `zinbwave` returns a `SummarizedExperiment` object that includes normalized expression measures, defined as deviance residuals from the fit of the ZINB-WaVE model with user-supplied gene- and cell-level covariates. Such residuals can be used for visualization purposes (e.g., in heatmaps, boxplots). Note that, in this case, the low-dimensional matrix `W` is not included in the computation of residuals to avoid the removal of the biological signal of interest.
 
 [DR: Fanny, did you figure out why we get infinite values? If not, we need to at least explain why we are doing what we do below.]
-[FP: I tried to play with the epsilon to see if we could get rid of the infinite values in the normalized values. With default epsilon, we have about 40 infinite values, with epsilon 10000, we have about 20. When K = 0, there is no infinite values but the normalized values don't capture as much of biology (looking at the pca with published clusters colors). It seems to me that we get infinite norm. values when the number of parameters to estimate is large. I tried to reduce K to 25 (no infinite but W not as good), 40 (infinite values but W looks ok)... to be continued.]
-
+[FP: I created a pull request on github. Let me know what you think.]
 
 ```{r norm}
 norm <- assays(se)$normalizedValues
