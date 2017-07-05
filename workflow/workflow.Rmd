@@ -467,7 +467,7 @@ lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1")
 Before fitting the simultaneous principal curves, we check the structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
 ```{r tree, fig.cap="Cells color-coded by cluster in a 4-dimensional MDS space with connecting lines between cluster centers representing the inferred structure."}
-pairs(lineages, type="lineages", col = pal[primaryClusterNamed(ceObj)])
+pairs(lineages, type="lineages", col = pal[cl])
 ```
 
 Having found the global lineage structure, we now construct a set of smooth, branching curves in order to infer the pseudotime variables. Simultaneous principal curves are constructed from the individual cells along each lineage, rather than the cell clusters. This makes them more stable and better suited for assigning cells to lineages. The final curves are shown in Figure \@ref(fig:curves).
@@ -475,7 +475,7 @@ Having found the global lineage structure, we now construct a set of smooth, bra
 ```{r curves, fig.cap="Cells color-coded by cluster in a 4-dimensional MDS space with smooth curves representing each inferred lineage."}
 lineages <- getCurves(lineages)
 
-pairs(lineages, type="curves", col = pal[primaryClusterNamed(ceObj)])
+pairs(lineages, type="curves", col = pal[cl])
 ```
 
 ```{r lineages}
