@@ -38,13 +38,10 @@ knitr::opts_chunk$set(fig.align="center", fig.width=5, fig.height=5)
 
 [FP: todo before to convert to latex: 
 
-- solve loading packages issues (DR), DONE!
-- versions of packages we want to use in develop branches and change functions in text accordingly (EP and DR), [DR: scone and zinbwave now OK!]
+- make sure versions package ok and pushed to bioc (DR, EP, FP),
 - update clustering section with new clusterExperiment functions (EP),
-- add details in section preprocessing (DR), DONE,
 - address Sandrine's comments in sections slingshot and de (KS),
-- try running workflow with more genes (FP),
-- plot gene variance density (FP),
+- try running workflow with more genes (DR),
 - clean up singlecellworkflow package (FP),
 - update NAMESPACE and DESCRIPTION (FP),
 - install and run package using cache instead of saved files for zinbwave and clusterExperiment and making sure we can build the vignette using R 3.4 and bioc-devel 3.6 (all?),
@@ -106,7 +103,7 @@ set.seed(20)
 ```
 
 Note that in order to successfully run the workflow, we need the devel versions
-of the Bioconductor packages `scone (>=1.1.2)`, `zinbwave (>=0.99.5)`, and `clusterExperiment (>=1.3.2)` [DR: Elizabeth, please check!]. We recommend running Bioconductor 3.6 (currently the devel version; see https://www.bioconductor.org/developers/how-to/useDevel/).
+of the Bioconductor packages `scone (>=1.1.2)`, `zinbwave (>=0.99.6)`, and `clusterExperiment (>=1.3.2)` [DR: Elizabeth, please check!]. We recommend running Bioconductor 3.6 (currently the devel version; see https://www.bioconductor.org/developers/how-to/useDevel/).
 
 ```{r parallel, echo=FALSE}
 NCORES <- 2
@@ -274,7 +271,7 @@ knitr::include_graphics("zinb_schema.pdf")
 As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects.
 
 ```{r zinb}
-print(system.time(se <- zinbwave(core, K = 40, X = "~ Batch",  
+print(system.time(se <- zinbwave(core, K = 50, X = "~ Batch",  
                                  residuals = TRUE,
                                  normalizedValues = TRUE)))
 ```
@@ -283,16 +280,9 @@ print(system.time(se <- zinbwave(core, K = 40, X = "~ Batch",
 
 The function `zinbwave` returns a `SummarizedExperiment` object that includes normalized expression measures, defined as deviance residuals from the fit of the ZINB-WaVE model with user-specified gene- and cell-level covariates. Such residuals can be used for visualization purposes (e.g., in heatmaps, boxplots). Note that, in this case, the low-dimensional matrix `W` is not included in the computation of residuals to avoid the removal of the biological signal of interest.
 
-[DR: Fanny, did you figure out why we get infinite values? If not, we need to at least explain why we are doing what we do below.]
-[FP: I created a pull request on github. Let me know what you think.]
-
 ```{r norm}
 norm <- assays(se)$normalizedValues
-if (sum(is.infinite(norm))>0){
-  maxNorm = max(norm[!is.infinite(norm)])
-  assays(se)$normalizedValues[is.infinite(norm)] <- maxNorm
-  norm <- assays(se)$normalizedValues
-}
+stopifnot(sum(is.infinite(norm))==0)
 norm[1:3,1:3]
 ```
 
@@ -371,31 +361,22 @@ table(primaryClusterNamed(ceObj))
 ```
 
 ```{r barplotOurs, fig.cap="Barplot of number of cells per cluster, for our workflow's clusterint."}
-plotBarplot(ceObj) 
+plotBarplot(ceObj, legend = F) 
 ```
 
 [FP: Should we add here the short paragraph Elizabeth was talking about to compare our found clusters versus the original published clusters?]
+[FP: we should add a comment on cluster 7.]
 
 ```{r addPublishedClusters, fig.cap="Barplot of number of cells per cluster, for original published clustering."}
 ceObj<-addClusters(ceObj, colData(ceObj)$publishedClusters, 
                    clusterLabel = "publishedClusters")
-plotBarplot(ceObj,whichClusters=c("combineMany","publishedClusters")) 
+plotBarplot(ceObj,whichClusters=c("combineMany","publishedClusters"), legend = F) 
 ```
-
-EP: the label `clusterLabels` for the original labels might do better to be changed to `publishedClusters` so that it is more informative. Also, we don't do a direct comparison of the `publishedClusters`
- to the found clusters -- is that relevant? If so, it is probably better to add the published clusters via `addClusters` so it is easier to treat them like clusters. This is perhaps useful for a workflow since this is a common task that `clusterExperiment` makes easy. Here is code that does this:
- 
-[FP: after the modifications, do we still need function addCluters? If we want to illustrate that clusterExperiment package has a convenient function to add clusters to a clusterExperiment object, we can keep it and say that here it is not necessary.]
-
  
 ```{r comparePublished, fig.cap="Comparison between the clustering found using our workflow and the original published clustering."}
 plotClusters(ceObj, whichClusters=c("mergeClusters","combineMany","publishedClusters"))
 ```
  
-[EP: If we do the above code, then the `plotHeatmap` command below should be modified to have the `publishedClusters` under the `whichClusters` argument. ]
-
-[FP: Elizabeth, I changed the `clusterLabels` to `publishedClusters`, more informative indeed. Maybe, we could add the plotClusters to compare the published and our own clusters and the plotBarplot to illustrate our previous call to function table()? I modified the code accordingly. If you don't like it, feel free to change, it is just a proposition.]
-
 Figure \@ref(fig:heatmapsClusters) displays a heatmap of the normalized expression measures for the 1,000 most variable genes, where cells are clustered according to the RSEC consensus.
 
 ```{r heatmapsClusters, fig.cap="Heatmap of the normalized expression measures for the 1,000 most variable genes, where rows correspond to genes and columns to cells ordered by RSEC clusters."}
