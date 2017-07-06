@@ -38,15 +38,12 @@ knitr::opts_chunk$set(fig.align="center", fig.width=5, fig.height=5)
 
 [FP: todo before to convert to latex: 
 
-- try running workflow with more genes (DR),
-- install and run package making sure we can build the vignette using R 3.4 and bioc-devel 3.6 (all?),
+- try running workflow with more genes (DR if time),
+- colors and labels in plotBarplot to compare original and our clustering (EP, DR),
+- check removal cluster c4 (all)
 - make singlecellworkflow package public (FP).]
 
 [FP: todo after converting to latex (FP): 
-
-- add space between paragraphs, 
-- check uniformity first/last names in references, 
-- add back space after word task in abstract, 
 - submit.]
 
 # Introduction
