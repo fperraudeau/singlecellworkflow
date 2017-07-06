@@ -38,13 +38,10 @@ knitr::opts_chunk$set(fig.align="center", fig.width=5, fig.height=5)
 
 [FP: todo before to convert to latex: 
 
-- make sure versions package ok and pushed to bioc (DR, EP, FP),
-- update clustering section with new clusterExperiment functions (EP),
-- address Sandrine's comments in sections slingshot and de (KS),
 - try running workflow with more genes (DR),
 - clean up singlecellworkflow package (FP),
 - update NAMESPACE and DESCRIPTION (FP),
-- install and run package using cache instead of saved files for zinbwave and clusterExperiment and making sure we can build the vignette using R 3.4 and bioc-devel 3.6 (all?),
+- install and run package making sure we can build the vignette using R 3.4 and bioc-devel 3.6 (all?),
 - make singlecellworkflow package public (FP).]
 
 [FP: todo after converting to latex (FP): 
@@ -266,7 +263,7 @@ In scRNA-seq analysis, dimensionality reduction is often used as a preliminary s
 Here, we perform dimensionality reduction using the zero-inflated negative binomial-based wanted variation extraction (ZINB-WaVE) method implemented in the Bioconductor R package `zinbwave`. The method fits a ZINB model that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a sample-level intercept, which serves as a global-scaling normalization factor. The user can also include both gene-level and sample-level covariates. The inclusion of observed and unobserved sample-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects (e.g., gene length and GC-content effects). A schematic view of the ZINB-WaVE model is provided in Figure \@ref(fig:zinbschema). For greater detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
 
 ```{r zinbschema, echo=FALSE, out.width="95%", fig.cap="ZINB-WaVE: Schematic view of the ZINB-WaVE model. This figure was reproduced with kind permission from Risso et al. (2017)."}
-knitr::include_graphics("zinb_schema.pdf")
+knitr::include_graphics("zinb_schema.png")
 ```
 
 As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects.
@@ -361,21 +358,19 @@ The distribution of cells across the consensus clusters can be visualized in Fig
 table(primaryClusterNamed(ceObj))
 ```
 
-```{r barplotOurs, fig.cap="RSEC: Barplot of number of cells per cluster, for our workflow's clustering."}
+```{r barplotOurs, fig.cap="RSEC: Barplot of number of cells per cluster, for our workflow's clustering, color-coded by RSEC clustering."}
 plotBarplot(ceObj, legend = F) 
 ```
 
+The distribution of cells in our workflow's clustering overall agrees with that in the original published clustering (Figure \@ref(fig:addPublishedClusters)), the main difference being that several of the published clusters were merged here into single clusters. This discrepancy is likely caused by the fact that we performed dimensionality reduction using ZINB-WaVE and provided the resulting `W` matrix as input to `RSEC` instead of performing dimensionality reduction on the normalized counts within the `RSEC` function. 
 
-The distribution of cells in our workflow's clustering overall agrees with that in the original published clustering (Figures \@ref(fig:addPublishedClusters) and \@ref(fig:comparePublished)), the main difference being that several of the published clusters were merged here into single clusters. This discrepancy is likely caused by the fact that we performed dimensionality reduction using ZINB-WaVE and provided the resulting `W` matrix as input to `RSEC` instead of performing dimensionality reduction on the normalized counts within the `RSEC` function. 
+[FP: Elizabeth or Davide, how can we change the colors in Figure \@ref(fig:addPublishedClusters) to match the colors we use for publishedClusters (that is `col_clus` like in Figure \@ref(fig:mdsW)). I tried colPalette argument, but it does not work with SummarizedExperiment input. Also, would it be possible to have the same order and labels for the barplots in Figures \@ref(fig:barplotOurs) and \@ref(fig:addPublishedClusters) (barplots labelled -1 and Not Assigned are the same, right?)?
 
-```{r addPublishedClusters, fig.cap="RSEC: Barplot of number of cells per cluster, for original published clustering."}
-ceObj<-addClusters(ceObj, colData(ceObj)$publishedClusters, 
-                   clusterLabel = "publishedClusters")
-plotBarplot(ceObj,whichClusters=c("combineMany","publishedClusters"), legend = F) 
-```
- 
-```{r comparePublished, fig.cap="RSEC: Comparison between the clustering found using our workflow and the original published clustering."}
-plotClusters(ceObj, whichClusters=c("mergeClusters","combineMany","publishedClusters"))
+```{r addPublishedClusters, fig.cap="RSEC: Barplot of number of cells per cluster, for our workflow's clustering, color-coded by original published clustering."}
+ceObj <- addClusters(ceObj, colData(ceObj)$publishedClusters, 
+                     clusterLabel = "publishedClusters")
+plotBarplot(ceObj, whichClusters=c("combineMany","publishedClusters"),
+            xlab = "", legend = F) 
 ```
  
 Figure \@ref(fig:heatmapsClusters) displays a heatmap of the normalized expression measures for the 1,000 most variable genes, where cells are clustered according to the RSEC consensus.
@@ -427,30 +422,38 @@ Cluster name | Description | Color | Correspondence
 c1 | HBC | blue | original 1, 5
 c2 | GBC | green | original 2, 3, 11
 c3 | mSUS | red | original 4, 7
-c4 | im | orange | -2 
+c4 | Contaminants | orange | original -2 
 c5 | mOSN | purple | original 9, 12
 c6 | Immature Neuron | brown | original 10, 14
 c7 | MV | cian | original 15
+
+Cells in cluster `c4` have a cluster label of `-2` in the original published clustering meaning that they were not assigned to any cluster in the original publication. These cells were actually identified as non-sensory contaminants as they overexpress gene `Reg3g` (see Figure S1 from [@Fletcher2017] and Figure \@ref(fig:boxplotReg3g)) and were removed from the original published clustering. While it is reassuring that our workflow clustered these cells separately with no influence on the clustering of the other cells, we removed cluster `c4` to infer lineages and pseudotimes as cells in this cluster do not participate in the cell differentiation process. Note that our workflow's clustering did not capture all the cells overexpressing gene `Reg3g` in cluster `c4` (see Figure \@ref(fig:boxplotReg3g)), however we keep these cells to infer lineages as they did not seem to influence the clustering.
+
+[FP: check writing + table with correspondance of clusters]
+
+```{r boxplotReg3g, fig.width=4, fig.height=4, fig.cap="Boxplots of the log counts of gene Reg3g for cells in cluster c4 (left boxplot) and cells not in cluster c4 (right boxplot)."}
+c4 <- rep("other clusters", ncol(se)) 
+c4[primaryClusterNamed(ceObj) == "c4"] <- "cluster c4"
+boxplot(log1p(assay(se)["Reg3g", ]) ~ c4, ylab = "log counts", cex.axis = .8, cex.lab = .8)
+```
 
 To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the Slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of Slingshot, where we only provide the identity of the start cluster but not of the end clusters.
 
 ```{r}
 our_cl <- primaryClusterNamed(ceObj)
-cl = our_cl[!our_cl %in% c("-1", "c4")]
-pal = pal[!names(pal) %in% c("-1", "c4")]
+cl <- our_cl[!our_cl %in% c("-1", "c4")]
+pal <- pal[!names(pal) %in% c("-1", "c4")]
 X <- W[!our_cl %in% c("-1", "c4"), ]
 mds <- cmdscale(dist(X), eig = TRUE, k = 4)
 X <- mds$points
 
 lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1")
-print(lineages)
 ```
 
 Before fitting the simultaneous principal curves, we examine the global structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
 ```{r tree, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space with connecting lines between cluster centers representing the inferred global lineage structure."}
 pairs(lineages, type="lineages", col = pal[cl])
-print(lineages)
 ```
 
 Having found the global lineage structure, we now construct a set of smooth, branching curves in order to infer the pseudotime variables. Simultaneous principal curves are constructed from the individual cells along each lineage, rather than the cell clusters. This makes them more stable and better suited for assigning cells to lineages. The final curves are shown in Figure \@ref(fig:curves).
@@ -458,15 +461,13 @@ Having found the global lineage structure, we now construct a set of smooth, bra
 ```{r curves, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space with smooth curves representing each inferred lineage."}
 lineages <- getCurves(lineages)
 pairs(lineages, type="curves", col = pal[cl])
-print(lineages)
 ```
 
 ```{r lineages}
 lineages
-print(lineages)
 ```
 
-In the workflow, we recover a reasonable ordering of the clusters using the unsupervised version of slingshot. However, in some other cases, we have noticed that we need to give more guidance to the algorithm to find the correct ordering. `getLineages` has the option for the user to provide known end cluster(s). Here is the code to use `slingshot` in a supervised setting, where we know that clusters `c8` and `c6` represent terminal cell fates.
+In the workflow, we recover a reasonable ordering of the clusters using the unsupervised version of slingshot. However, in some other cases, we have noticed that we need to give more guidance to the algorithm to find the correct ordering. `getLineages` has the option for the user to provide known end cluster(s). Here is the code to use `slingshot` in a supervised setting, where we know that clusters `c3` and `c7` represent terminal cell fates.
 
 
 ```{r slingshotsupervised, eval=FALSE}
@@ -486,7 +487,6 @@ After assigning the cells to lineages and ordering them within lineages, we are 
 More formally, for each lineage, we use the robust local regression method loess to model in a flexible, non-linear manner the relationship between a gene's normalized expression measures and pseudotime. We then can test the null hypothesis of no change over time for each gene using the `gam` package. We implement this approach for the neuronal lineage and display the expression measures of the top 100 genes by p-value in the heatmap of Figure \@ref(fig:heatmapsignificant). 	
 
 ```{r fitgam}
-print(lineages)
 t <- pseudotime(lineages)[,1]
 y <- assays(se)$normalizedValues[, !our_cl %in% c("-1", "c4")]
 gam.pval <- apply(y,1,function(z){
