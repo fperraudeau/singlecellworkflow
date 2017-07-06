@@ -215,6 +215,7 @@ After sample filtering, we are left with `r ncol(se)` good quality cells.
 
 Finally, for computational efficiency, we retain only the 1,000 most variable genes. This seems to be a reasonnable choice for the illustrative purpose of this workflow, as we are able to recover the biological signal found in the published analysis ([@Fletcher2017]). In general, however, we recommend care in selecting a gene filtering scheme, as an appropriate choice is dataset-dependent. 
 
+
 ```{r}
 # Filtering to top 1,000 most variable genes
 vars <- rowVars(log1p(assay(se)))
@@ -364,6 +365,7 @@ table(primaryClusterNamed(ceObj))
 plotBarplot(ceObj, legend = F) 
 ```
 
+
 The distribution of cells in our workflow's clustering overall agrees with that in the original published clustering (Figures \@ref(fig:addPublishedClusters) and \@ref(fig:comparePublished)), the main difference being that several of the published clusters were merged here into single clusters. This discrepancy is likely caused by the fact that we performed dimensionality reduction using ZINB-WaVE and provided the resulting `W` matrix as input to `RSEC` instead of performing dimensionality reduction on the normalized counts within the `RSEC` function. 
 
 ```{r addPublishedClusters, fig.cap="RSEC: Barplot of number of cells per cluster, for original published clustering."}
@@ -425,46 +427,51 @@ Cluster name | Description | Color | Correspondence
 c1 | HBC | blue | original 1, 5
 c2 | GBC | green | original 2, 3, 11
 c3 | mSUS | red | original 4, 7
-c4 | mOSN | orange | original 9, 12
-c5 | Immature Neuron | purple | original 10, 14
-c6 | MV | brown | original 15
+c4 | im | orange | -2 
+c5 | mOSN | purple | original 9, 12
+c6 | Immature Neuron | brown | original 10, 14
+c7 | MV | cian | original 15
 
 To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the Slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of Slingshot, where we only provide the identity of the start cluster but not of the end clusters.
 
 ```{r}
 our_cl <- primaryClusterNamed(ceObj)
-cl = our_cl[our_cl != "-1"]
-pal = pal[names(pal) != "-1"]
-X <- W[our_cl != "-1", ]
+cl = our_cl[!our_cl %in% c("-1", "c4")]
+pal = pal[!names(pal) %in% c("-1", "c4")]
+X <- W[!our_cl %in% c("-1", "c4"), ]
 mds <- cmdscale(dist(X), eig = TRUE, k = 4)
 X <- mds$points
 
 lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1")
+print(lineages)
 ```
 
 Before fitting the simultaneous principal curves, we examine the global structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
 ```{r tree, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space with connecting lines between cluster centers representing the inferred global lineage structure."}
 pairs(lineages, type="lineages", col = pal[cl])
+print(lineages)
 ```
 
 Having found the global lineage structure, we now construct a set of smooth, branching curves in order to infer the pseudotime variables. Simultaneous principal curves are constructed from the individual cells along each lineage, rather than the cell clusters. This makes them more stable and better suited for assigning cells to lineages. The final curves are shown in Figure \@ref(fig:curves).
 
 ```{r curves, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space with smooth curves representing each inferred lineage."}
 lineages <- getCurves(lineages)
-
 pairs(lineages, type="curves", col = pal[cl])
+print(lineages)
 ```
 
 ```{r lineages}
 lineages
+print(lineages)
 ```
 
 In the workflow, we recover a reasonable ordering of the clusters using the unsupervised version of slingshot. However, in some other cases, we have noticed that we need to give more guidance to the algorithm to find the correct ordering. `getLineages` has the option for the user to provide known end cluster(s). Here is the code to use `slingshot` in a supervised setting, where we know that clusters `c8` and `c6` represent terminal cell fates.
 
+
 ```{r slingshotsupervised, eval=FALSE}
 lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1",
-                         end.clus = c("c3", "c6"))
+                         end.clus = c("c3", "c7"))
 lineagees <- getCurves(lineages)
 pairs(lineages, type="curves", col = pal[primaryClusterNamed(ceObj)])
 pairs(lineages, type="lineages", col = pal[primaryClusterNamed(ceObj)], show.constraints = TRUE)
@@ -479,8 +486,9 @@ After assigning the cells to lineages and ordering them within lineages, we are 
 More formally, for each lineage, we use the robust local regression method loess to model in a flexible, non-linear manner the relationship between a gene's normalized expression measures and pseudotime. We then can test the null hypothesis of no change over time for each gene using the `gam` package. We implement this approach for the neuronal lineage and display the expression measures of the top 100 genes by p-value in the heatmap of Figure \@ref(fig:heatmapsignificant). 	
 
 ```{r fitgam}
+print(lineages)
 t <- pseudotime(lineages)[,1]
-y <- assays(se)$normalizedValues[, our_cl != "-1"]
+y <- assays(se)$normalizedValues[, !our_cl %in% c("-1", "c4")]
 gam.pval <- apply(y,1,function(z){
   d <- data.frame(z=z, t=t)
   tmp <- gam(z ~ lo(t), data=d)
