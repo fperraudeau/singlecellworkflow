@@ -213,9 +213,9 @@ dim(se)
 
 After sample filtering, we are left with `r ncol(se)` good quality cells.
 
-Finally, we retain only the 1,000 most variable genes. It speeds up the computations and allows to remove genes with low biological signal. As the 1,000 most variable genes allow to recover the biological signal found in the published analysis ([@Fletcher2017]), we think it is a reasonable choice for this particular analysis. We recommend, however, to explore the number of genes required to extract the biological signal in an actual data analysis.
+Finally, for computational efficiency, we retain only the 1,000 most variable genes. This seems to be a reasonnable choice for the illustrative purpose of this workflow, as we are able to recover the biological signal found in the published analysis ([@Fletcher2017]). In general, however, we recommend care in selecting an approapriate gene filtering scheme for an actual data analysis.
 
-[FP: check]
+[FP: check. SD: I rephrased the above paragraph.]
 
 ```{r}
 # Filtering to top 1,000 most variable genes
@@ -326,7 +326,7 @@ legend(x = "bottomright", legend = unique(names(col_clus)), cex = .5,
 
 The next step of the workflow is to cluster the cells according to the low-dimensional matrix `W` computed in the previous step. We use the resampling-based sequential ensemble clustering (RSEC) framework implemented in the `RSEC` function from the Bioconductor R package `clusterExperiment`. Specifically, given a set of user-supplied base clustering algorithms and associated tuning parameters (e.g., _k_-means, with a range of values for _k_), RSEC generates a collection of candidate clusterings, with the option of resampling cells and using a sequential tight clustering procedure as in [@Tseng2005]. A consensus clustering is obtained based on the levels of co-clustering of samples across the candidate clusterings. The consensus clustering is further condensed by merging similar clusters, which is done by creating a hierarchy of clusters, working up the tree, and testing for differential expression between sister nodes, with nodes of insufficient DE collapsed. As in supervised learning, resampling greatly improves the stability of clusters and considering an ensemble of methods and tuning parameters allows us to capitalize on the different strengths of the base algorithms and avoid the subjective selection of tuning parameters. 
 
-Note that the defaults in `RSEC` are designed for input data that are the actual (normalized) counts. Here, we are applying `RSEC` instead to the low-dimensional `W` matrix of the previous step, for which we make a separate `SummarizedExperiment` object. For this reason, we choose to not use certain options in `RSEC`. In particular, we do not use the default dimensionality reduction step, since our input `W` is already in a space of reduced dimension. Specifically, `RSEC` offers a dimensionality reduction option for the input to both the clustering routines (`dimReduce`) and the construction of the hiearchy between the clusters (`dendroReduce`). We also skip the option to merge our clusters based on the amount of differential gene expression between clusters since our input data is `W` and not the actual individual gene expression values. 
+Note that the defaults in `RSEC` are designed for input data that are the actual (normalized) counts. Here, we are applying `RSEC` instead to the low-dimensional `W` matrix of the previous step, for which we make a separate `SummarizedExperiment` object. For this reason, we choose to not use certain options in `RSEC`. In particular, we do not use the default dimensionality reduction step, since our input `W` is already in a space of reduced dimension. Specifically, `RSEC` offers a dimensionality reduction option for the input to both the clustering routines (`dimReduce`) and the construction of the hiearchy between the clusters (`dendroReduce`). We also skip the option to merge our clusters based on the amount of differential gene expression between clusters.
   
 ```{r rsec_50}
 seObj <- SummarizedExperiment(t(W), colData = colData(core))
@@ -366,9 +366,9 @@ table(primaryClusterNamed(ceObj))
 plotBarplot(ceObj, legend = F) 
 ```
 
-The distribution of cells in our workflow's clustering is in agreement with the distribution of cells in the original published clustering (Figures \@ref(fig:addPublishedClusters) and \@ref(fig:comparePublished)) where the major difference is that in the published analysis several clusters have been merged into single clusters in our workflow's clustering. This difference is likelihood to be caused by the fact that we performed the dimensionality reduction step using the ZINB-WaVE model and input the W matrix to the RSEC function instead of performing the dimensionality reduction on the normalized counts within the RSEC function, resulting
+The distribution of cells in our workflow's clustering overall agrees with that in the original published clustering (Figures \@ref(fig:addPublishedClusters) and \@ref(fig:comparePublished)), the main difference being that several of the published clusters were merged into single clusters. This discrepancy is likely caused by the fact that we performed dimensionality reduction using ZINB-WaVE and provided the resulting `W` matrix as input to RSEC instead of performing dimensionality reduction on the normalized counts within the `RSEC` function. 
 
-[FP: check]
+[FP: check. SD: Rephrased a little.]
 
 ```{r addPublishedClusters, fig.cap="Barplot of number of cells per cluster, for original published clustering."}
 ceObj<-addClusters(ceObj, colData(ceObj)$publishedClusters, 
@@ -446,9 +446,9 @@ X <- mds$points
 lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1")
 ```
 
-[SD: Mention reason for having these two figures, otherwise drop second figure. If keep second figure: Move it first, match notation for dimensions (along diagonal) in the two figures, and provide color legend for second figure.]
+[SD: Check colors.]
 
-Before fitting the simultaneous principal curves, we check the structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
+Before fitting the simultaneous principal curves, we examine the global structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
 ```{r tree, fig.cap="Cells color-coded by cluster in a 4-dimensional MDS space with connecting lines between cluster centers representing the inferred structure."}
 pairs(lineages, type="lineages", col = pal[cl])
