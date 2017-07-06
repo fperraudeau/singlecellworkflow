@@ -39,8 +39,6 @@ knitr::opts_chunk$set(fig.align="center", fig.width=5, fig.height=5)
 [FP: todo before to convert to latex: 
 
 - try running workflow with more genes (DR),
-- clean up singlecellworkflow package (FP),
-- update NAMESPACE and DESCRIPTION (FP),
 - install and run package making sure we can build the vignette using R 3.4 and bioc-devel 3.6 (all?),
 - make singlecellworkflow package public (FP).]
 
