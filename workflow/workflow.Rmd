@@ -10,7 +10,7 @@ author:
   - name: Elizabeth Purdom
     affiliation: Department of Statistics, University of California, Berkeley, Berkeley, CA
   - name: Sandrine Dudoit
-    affiliation: Graduate Group in Biostatistics, University of California, Berkeley; Division of Biostatistics and Department of Statistics, University of California, Berkeley, Berkeley, CA
+    affiliation: Division of Biostatistics and Department of Statistics, University of California, Berkeley, Berkeley, CA
     
 abstract: Novel single-cell transcriptome sequencing assays allow researchers to measure gene expression levels at the resolution of single cells and offer the unprecendented opportunity to investigate at the molecular level fundamental biological questions such as stem cell differentiation or the discovery and characterization of rare cell types. However, such assays raise challenging statistical and computational questions and require the development of novel methodology and software. Using stem cell differentiation in the mouse olfactory epithelium as a case study, this integrated workflow provides a step-by-step tutorial to the methodology and associated software for the following four main tasks:(1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and pseudotimes; and (4) differential expression analysis along lineages. 
 
@@ -66,7 +66,7 @@ knitr::include_graphics("schema_workflow.png")
 knitr::include_graphics("stemcelldiff_Fletcher2017_2e.png")
 ```
 
-This workflow is illustrated using data from a scRNA-seq study of stem cell differentiation in the mouse olfactory epithelium (OE) [@Fletcher2017]. The olfactory epithelium contains mature olfactory sensory neurons (mOSN) that are continuously renewed in the epithelium via neurogenesis through the differentiation of globose basal cells (GBCs), which are the actively proliferating cells in the epithelium. When a severe injury to the entire tissue happens, the olfactory epithelium can regenerate from normally quiescent stem cells called horizontal basal cells (HBCs), which become activated to differentiate and reconstitute all major cell types in the epithelium.
+This workflow is illustrated using data from a scRNA-seq study of stem cell differentiation in the mouse olfactory epithelium (OE) [@Fletcher2017]. The olfactory epithelium contains mature olfactory sensory neurons (mOSN) that are continuously renewed in the epithelium via neurogenesis through the differentiation of globose basal cells (GBC), which are the actively proliferating cells in the epithelium. When a severe injury to the entire tissue happens, the olfactory epithelium can regenerate from normally quiescent stem cells called horizontal basal cells (HBC), which become activated to differentiate and reconstitute all major cell types in the epithelium.
 
 The scRNA-seq dataset we use as a case study was generated to study the differentitation of HBC stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. The expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using a statistical analysis pipeline analogous to that in the present workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017; @Risso2017; @Street2017].
 
@@ -74,7 +74,7 @@ It was found that the first major bifurcation in the HBC lineage trajectory occu
 
 ## Package versions
 
-We need the following packages.
+The following packages are needed.
 
 ```{r packages}
 # Bioconductor
@@ -255,13 +255,13 @@ table(data.frame(batch = as.vector(batch),
 
 In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime ordering, and the identification of DE genes. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low-dimensional signal of interest [@Peer2017; @Pierson2015; @Risso2017].
 
-Here, we perform dimensionality reduction using the zero-inflated negative binomial-based wanted variation extraction (ZINB-WaVE) method implemented in the Bioconductor R package `zinbwave`. The method fits a ZINB model that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a sample-level intercept, which serves as a global-scaling normalization factor. The user can also include both gene-level and sample-level covariates. The inclusion of observed and unobserved sample-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects (e.g., gene length and GC-content effects). A schematic view of the ZINB-WaVE model is provided in Figure \@ref(fig:zinbschema). For greater detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
+Here, we perform dimensionality reduction using the zero-inflated negative binomial-based wanted variation extraction (ZINB-WaVE) method implemented in the Bioconductor R package `zinbwave`. The method fits a ZINB model that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a cell-level intercept, which serves as a global-scaling normalization factor. The user can also specify both gene-level and cell-level covariates. The inclusion of observed and unobserved cell-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects (e.g., gene length and GC-content effects). A schematic view of the ZINB-WaVE model is provided in Figure \@ref(fig:zinbschema). For greater detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
 
 ```{r zinbschema, echo=FALSE, out.width="95%", fig.cap="ZINB-WaVE: Schematic view of the ZINB-WaVE model. This figure was reproduced with kind permission from Risso et al. (2017)."}
 knitr::include_graphics("zinb_schema.png")
 ```
 
-As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects.
+As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`.
 
 ```{r zinb}
 print(system.time(se <- zinbwave(core, K = 50, X = "~ Batch",  
@@ -317,7 +317,7 @@ legend(x = "bottomright", legend = unique(names(col_clus)), cex = .5,
 
 The next step of the workflow is to cluster the cells according to the low-dimensional matrix `W` computed in the previous step. We use the resampling-based sequential ensemble clustering (RSEC) framework implemented in the `RSEC` function from the Bioconductor R package `clusterExperiment`. Specifically, given a set of user-supplied base clustering algorithms and associated tuning parameters (e.g., _k_-means, with a range of values for _k_), RSEC generates a collection of candidate clusterings, with the option of resampling cells and using a sequential tight clustering procedure as in [@Tseng2005]. A consensus clustering is obtained based on the levels of co-clustering of samples across the candidate clusterings. The consensus clustering is further condensed by merging similar clusters, which is done by creating a hierarchy of clusters, working up the tree, and testing for differential expression between sister nodes, with nodes of insufficient DE collapsed. As in supervised learning, resampling greatly improves the stability of clusters and considering an ensemble of methods and tuning parameters allows us to capitalize on the different strengths of the base algorithms and avoid the subjective selection of tuning parameters. 
 
-Note that the defaults in `RSEC` are designed for input data that are the actual (normalized) counts. Here, we are applying `RSEC` instead to the low-dimensional `W` matrix of the previous step, for which we make a separate `SummarizedExperiment` object. For this reason, we choose to not use certain options in `RSEC`. In particular, we do not use the default dimensionality reduction step, since our input `W` is already in a space of reduced dimension. Specifically, `RSEC` offers a dimensionality reduction option for the input to both the clustering routines (`dimReduce`) and the construction of the hiearchy between the clusters (`dendroReduce`). We also skip the option to merge our clusters based on the amount of differential gene expression between clusters.
+Note that the defaults in `RSEC` are designed for input data that are the actual (normalized) counts. Here, we are applying `RSEC` instead to the low-dimensional `W` matrix from ZINB-WaVE, for which we make a separate `SummarizedExperiment` object. For this reason, we choose to not use certain options in `RSEC`. In particular, we do not use the default dimensionality reduction step, since our input `W` is already in a space of reduced dimension. Specifically, `RSEC` offers a dimensionality reduction option for the input to both the clustering routines (`dimReduce`) and the construction of the hiearchy between the clusters (`dendroReduce`). We also skip the option to merge our clusters based on the amount of differential gene expression between clusters.
   
 ```{r rsec_50}
 seObj <- SummarizedExperiment(t(W), colData = colData(core))
@@ -353,15 +353,15 @@ The distribution of cells across the consensus clusters can be visualized in Fig
 table(primaryClusterNamed(ceObj))
 ```
 
-```{r barplotOurs, fig.cap="RSEC: Barplot of number of cells per cluster, for our workflow's clustering, color-coded by RSEC clustering."}
+```{r barplotOurs, fig.cap="RSEC: Barplot of number of cells per cluster for our workflow's RSEC clustering."}
 plotBarplot(ceObj, legend = F) 
 ```
 
 The distribution of cells in our workflow's clustering overall agrees with that in the original published clustering (Figure \@ref(fig:addPublishedClusters)), the main difference being that several of the published clusters were merged here into single clusters. This discrepancy is likely caused by the fact that we performed dimensionality reduction using ZINB-WaVE and provided the resulting `W` matrix as input to `RSEC` instead of performing dimensionality reduction on the normalized counts within the `RSEC` function. 
 
-[FP: Elizabeth or Davide, how can we change the colors in Figure \@ref(fig:addPublishedClusters) to match the colors we use for publishedClusters (that is `col_clus` like in Figure \@ref(fig:mdsW)). I tried colPalette argument, but it does not work with SummarizedExperiment input. Also, would it be possible to have the same order and labels for the barplots in Figures \@ref(fig:barplotOurs) and \@ref(fig:addPublishedClusters) (barplots labelled -1 and Not Assigned are the same, right?)?
+[FP: Elizabeth or Davide, how can we change the colors in Figure \@ref(fig:addPublishedClusters) to match the colors we use for publishedClusters (that is `col_clus` like in Figure \@ref(fig:mdsW)). I tried colPalette argument, but it does not work with SummarizedExperiment input. Also, would it be possible to have the same order and labels for the barplots in Figures \@ref(fig:barplotOurs) and \@ref(fig:addPublishedClusters) (barplots labelled -1 and Not Assigned are the same, right?)?]
 
-```{r addPublishedClusters, fig.cap="RSEC: Barplot of number of cells per cluster, for our workflow's clustering, color-coded by original published clustering."}
+```{r addPublishedClusters, fig.cap="RSEC: Barplot of number of cells per cluster, for our workflow's RSEC clustering, color-coded by original published clustering."}
 ceObj <- addClusters(ceObj, colData(ceObj)$publishedClusters, 
                      clusterLabel = "publishedClusters")
 plotBarplot(ceObj, whichClusters=c("combineMany","publishedClusters"),
@@ -389,7 +389,7 @@ plotHeatmap(ceObj, visualizeData = assays(se)$normalizedValues,
 
 Finally, we can visualize the cells in a two-dimensional space using the MDS of the low-dimensional matrix `W` and coloring the cells according to their newly-found RSEC clusters (Figure \@ref(fig:mdsWce)); this is anologous to Figure \@ref(fig:mdsW) for the original published clusters.
 
-```{r mdsWce, fig.cap="RSEC: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by RSEC clusters."}
+```{r mdsWce, fig.cap="RSEC: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by RSEC clustering."}
 palDF <- ceObj@clusterLegend[[1]]
 pal <- palDF[, "color"]
 names(pal) <- palDF[, "name"]
@@ -404,7 +404,7 @@ legend(x = "bottomright", legend = names(pal), cex = .5,
 
 We now demonstrate how to use the R software package `slingshot` to infer branching cell lineages and order cells by developmental progression along each lineage. The method, proposed in [@Street2017], comprises two main steps: (1) The inference of the global lineage structure (i.e., the number of lineages and where they branch) using a minimum spanning tree (MST) on the clusters identified above by `RSEC` and (2) the inference of cell pseudotime variables along each lineage using a novel method of simultaneous principal curves. The approach in (1) allows the identification of any number of novel lineages, while also accommodating the use of domain-specific knowledge to supervise parts of the tree (e.g., known terminal states); the approach in (2) yields robust pseudotimes for smooth, branching lineages. 
 
-The two steps of the Slingshot algorithm are implemented in the functions `getLineages` and `getCurves`, respectively. The first takes a low-dimensional representation of the cells and a vector of cluster labels. It fits an MST to the clusters and identifies lineages as paths through this tree. The output of `getLineages` is an object of class `SlingshotDataSet` containing all the information used to fit the tree and identify lineages. The function `getCurves` then takes this object as input and fits simultaneous principal curves to the identified lineages. These functions can be run separately, as below, or jointly by the wrapper function `slingshot`.
+The two steps of the Slingshot algorithm are implemented in the functions `getLineages` and `getCurves`, respectively. The first takes as input a low-dimensional representation of the cells and a vector of cluster labels. It fits an MST to the clusters and identifies lineages as paths through this tree. The output of `getLineages` is an object of class `SlingshotDataSet` containing all the information used to fit the tree and identify lineages. The function `getCurves` then takes this object as input and fits simultaneous principal curves to the identified lineages. These functions can be run separately, as below, or jointly by the wrapper function `slingshot`.
 
 From the original published work, we know that the start cluster should correspond to HBCs and the end clusters to MV, mOSN, and mSUS cells. Additionally, we know that GBCs should be at a junction before the differentiation between MV and mOSN cells (Figure \@ref(fig:stemcelldiff)). The correspondance between the clusters we found here and the original clusters is as follows.
 
@@ -422,11 +422,11 @@ c5 | mOSN | purple | original 9, 12
 c6 | Immature Neuron | brown | original 10, 14
 c7 | MV | cian | original 15
 
-Cells in cluster `c4` have a cluster label of `-2` in the original published clustering meaning that they were not assigned to any cluster in the original publication. These cells were actually identified as non-sensory contaminants as they overexpress gene `Reg3g` (see Figure S1 from [@Fletcher2017] and Figure \@ref(fig:boxplotReg3g)) and were removed from the original published clustering. While it is reassuring that our workflow clustered these cells separately with no influence on the clustering of the other cells, we removed cluster `c4` to infer lineages and pseudotimes as cells in this cluster do not participate in the cell differentiation process. Note that our workflow's clustering did not capture all the cells overexpressing gene `Reg3g` in cluster `c4` (see Figure \@ref(fig:boxplotReg3g)), however we keep these cells to infer lineages as they did not seem to influence the clustering.
+Cells in cluster `c4` have a cluster label of `-2` in the original published clustering, meaning that they were not assigned to any cluster. These cells were actually identified as non-sensory contaminants, as they overexpress gene `Reg3g` (see Figure S1 from [@Fletcher2017] and Figure \@ref(fig:boxplotReg3g)), and were removed from the original published clustering. While it is reassuring that our workflow clustered these cells separately, with no influence on the clustering of the other cells, we removed cluster `c4` to infer lineages and pseudotimes, as cells in this cluster do not participate in the cell differentiation process. Note that our workflow's clustering only captured XXX out of XXX cells overexpressing gene `Reg3g` in cluster `c4` (see Figure \@ref(fig:boxplotReg3g)), however we retain the remaining cells to infer lineages as they did not seem to influence the clustering.
 
-[FP: check writing + table with correspondance of clusters]
+[FP: check writing + table with correspondance of clusters. SD: I did minor edits to text above. Please check. Perhaps mention total number of contaminant cells and how many are in cluster `c4`.]
 
-```{r boxplotReg3g, fig.width=4, fig.height=4, fig.cap="Boxplots of the log counts of gene Reg3g for cells in cluster c4 (left boxplot) and cells not in cluster c4 (right boxplot)."}
+```{r boxplotReg3g, fig.width=4, fig.height=4, fig.cap="RSEC: Boxplots of the log count of gene Reg3g for cells in cluster c4 (left) and cells not in cluster c4 (right)."}
 c4 <- rep("other clusters", ncol(se)) 
 c4[primaryClusterNamed(ceObj) == "c4"] <- "cluster c4"
 boxplot(log1p(assay(se)["Reg3g", ]) ~ c4, ylab = "log counts", cex.axis = .8, cex.lab = .8)
@@ -447,13 +447,13 @@ lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1")
 
 Before fitting the simultaneous principal curves, we examine the global structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
-```{r tree, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space with connecting lines between cluster centers representing the inferred global lineage structure."}
+```{r tree, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space, with connecting lines between cluster centers representing the inferred global lineage structure."}
 pairs(lineages, type="lineages", col = pal[cl])
 ```
 
 Having found the global lineage structure, we now construct a set of smooth, branching curves in order to infer the pseudotime variables. Simultaneous principal curves are constructed from the individual cells along each lineage, rather than the cell clusters. This makes them more stable and better suited for assigning cells to lineages. The final curves are shown in Figure \@ref(fig:curves).
 
-```{r curves, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space with smooth curves representing each inferred lineage."}
+```{r curves, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space, with smooth curves representing each inferred lineage."}
 lineages <- getCurves(lineages)
 pairs(lineages, type="curves", col = pal[cl])
 ```
@@ -503,7 +503,7 @@ plotHeatmap(ce, clusterSamplesData = "orderSamplesValue", breaks = .99)
 
 ## Further developments
 
-In an effort to improve scRNA-seq data analysis workflows, we are currently exploring a variety of applications and extensions of our ZINB-WaVE model. In particular, we are developing a method to impute counts for dropouts; the imputed counts could be used in subsequent steps of the workflow, including dimensionality reduction, clustering, and cell lineage inference. In addition, we are extending ZINB-WaVE to differentially expression, both in terms of the negative binomial mean and the zero inflation probability, reflecting, respectively, gradual DE and on/off DE patterns. We are also developing a method to identify genes that are DE either within or between lineages inferred from Slingshot. 
+In an effort to improve scRNA-seq data analysis workflows, we are currently exploring a variety of applications and extensions of our ZINB-WaVE model. In particular, we are developing a method to impute counts for dropouts; the imputed counts could be used in subsequent steps of the workflow, including dimensionality reduction, clustering, and cell lineage inference. In addition, we are extending ZINB-WaVE to identify differentially expressed genes, both in terms of the negative binomial mean and the zero inflation probability, reflecting, respectively, gradual DE and on/off DE patterns. We are also developing a method to identify genes that are DE either within or between lineages inferred from Slingshot. 
 
 Finally, a new R class called `SingleCellExperiment` should be released soon. This new class would essentially be a `SummarizedExperiment` class with a couple of additional slots, the most important of which is `reducedDims`, which, much like the `assays` slot of `SummarizedExperiment`, can contain one or more matrices of reduced dimension. This new `SingleCellExperiment` class would be a valuable addition to the workflow, as we could store in a single object the raw counts as well as the low-dimensional matrix created by the ZINB-WaVE dimensionality reduction step. Once this class is implemented, we would like to incorporate it to the workflow.
 
