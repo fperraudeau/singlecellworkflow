@@ -8,18 +8,19 @@ This repository is designed to provide a tutorial for the analysis of scRNA-seq 
 To be able to run [workflow.Rmd](https://github.com/fperraudeau/singlecellworkflow/blob/master/workflow/workflow.Rmd), you need
 
 ### Bioconductor
-library(BiocParallel)
-library(clusterExperiment)
-library(scone)
-library(zinbwave)
+
+- BiocParallel
+- clusterExperiment
+- scone
+- zinbwave
 
 ### GitHub
-library(slingshot)
+- slingshot (https://github.com/kstreet13/slingshot)
 
 ### CRAN
-library(doParallel)
-library(gam)
-library(RColorBrewer)
+- doParallel
+- gam
+- RColorBrewer
 
 
 Note that you need the devel versions
