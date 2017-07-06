@@ -284,7 +284,6 @@ The function `zinbwave` returns a `SummarizedExperiment` object that includes no
 
 ```{r norm}
 norm <- assays(se)$normalizedValues
-stopifnot(sum(is.infinite(norm))==0)
 norm[1:3,1:3]
 ```
 
@@ -437,9 +436,9 @@ To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS o
 
 ```{r}
 our_cl <- primaryClusterNamed(ceObj)
-cl = our_cl[our_cl != "-1"]
-pal = pal[names(pal) != "-1"]
-X <- W[our_cl != "-1", ]
+cl = our_cl[!our_cl %in% c("-1", "c7")]
+pal = pal[!names(pal) %in% c("-1", "c7")]
+X <- W[!our_cl %in% c("-1", "c7"), ]
 mds <- cmdscale(dist(X), eig = TRUE, k = 4)
 X <- mds$points
 
@@ -466,7 +465,7 @@ pairs(lineages, type="curves", col = pal[cl])
 lineages
 ```
 
-In the workflow, we recover a reasonable ordering of the clusters using the unsupervised version of slingshot. However, in some other cases, we have noticed that we need to give more guidance to the algorithm to find the correct ordering. `getLineages` has the option for the user to provide known end cluster(s). Here is the code to use `slingshot` in a supervised setting, where we know that clusters `c8` and `c6` represent terminal cell fates.
+In the workflow, we recover a reasonable ordering of the clusters using the unsupervised version of slingshot. However, in some other cases, we have noticed that we need to give more guidance to the algorithm to find the correct ordering. `getLineages` has the option for the user to provide known end cluster(s). Here is the code to use `slingshot` in a supervised setting, where we know that clusters `c3` and `c6` represent terminal cell fates.
 
 ```{r slingshotsupervised, eval=FALSE}
 lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1",
@@ -486,7 +485,7 @@ More formally, for each lineage, we use the robust local regression method loess
 
 ```{r fitgam}
 t <- pseudotime(lineages)[,1]
-y <- assays(se)$normalizedValues[, our_cl != "-1"]
+y <- assays(se)$normalizedValues[, !our_cl %in% c("-1", "c7")]
 gam.pval <- apply(y,1,function(z){
   d <- data.frame(z=z, t=t)
   tmp <- gam(z ~ lo(t), data=d)
