@@ -27,12 +27,12 @@ output: BiocWorkflowTools::f1000_article
 
 ```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
 if(packageVersion("zinbwave")<"0.99.6") stop("must have current devel version to avoid bugs")
-if(packageVersion("clusterExperiment")<"1.3.2") stop("must have current develop version to avoid bugs")
+if(packageVersion("clusterExperiment")<"1.3.2") stop("must have current devel version to avoid bugs")
 if(packageVersion("scone")<"1.1.2") stop("must have current devel version to avoid bugs")
 
 library(BiocStyle)
 library(knitr)
-knitr::opts_chunk$set(cache=TRUE, error=FALSE, message=FALSE, warning=TRUE)
+knitr::opts_chunk$set(cache=TRUE, error=FALSE, message=FALSE, warning=FALSE)
 knitr::opts_chunk$set(fig.align="center", fig.width=5, fig.height=5)
 ```
 
@@ -238,8 +238,7 @@ In the original work [@Fletcher2017], cells were clustered into 14 different clu
 
 ```{r original}
 publishedClusters <- colData(core)[, "publishedClusters"]
-col_clus <- c("transparent", brewer.pal(12, "Set3"), brewer.pal(8, "Set2"))
-col_clus <- col_clus[1:length(unique(publishedClusters))]
+col_clus <- c("transparent", "#1B9E77", "antiquewhite2", "cyan", "#E7298A", "#A6CEE3", "#666666", "#E6AB02", "#FFED6F", "darkorchid2", "#B3DE69", "#FF7F00", "#A6761D", "#1F78B4")
 names(col_clus) <- sort(unique(publishedClusters))
 table(publishedClusters)
 ```
@@ -309,7 +308,7 @@ d <- dist(W)
 fit <- cmdscale(d, eig = TRUE, k = 2)
 plot(fit$points, col = col_clus[as.character(publishedClusters)], main = "",
      pch = 20, xlab = "Component 1", ylab = "Component 2")
-legend(x = "bottomright", legend = unique(names(col_clus)), cex = .5,
+legend(x = "topleft", legend = unique(names(col_clus)), cex = .5,
        fill = unique(col_clus), title = "Sample")
 ```
 
@@ -354,7 +353,7 @@ table(primaryClusterNamed(ceObj))
 ```
 
 ```{r barplotOurs, fig.cap="RSEC: Barplot of number of cells per cluster for our workflow's RSEC clustering."}
-plotBarplot(ceObj, legend = F) 
+plotBarplot(ceObj, legend = FALSE) 
 ```
 
 The distribution of cells in our workflow's clustering overall agrees with that in the original published clustering (Figure \@ref(fig:addPublishedClusters)), the main difference being that several of the published clusters were merged here into single clusters. This discrepancy is likely caused by the fact that we performed dimensionality reduction using ZINB-WaVE and provided the resulting `W` matrix as input to `RSEC` instead of performing dimensionality reduction on the normalized counts within the `RSEC` function. 
@@ -364,8 +363,13 @@ The distribution of cells in our workflow's clustering overall agrees with that 
 ```{r addPublishedClusters, fig.cap="RSEC: Barplot of number of cells per cluster, for our workflow's RSEC clustering, color-coded by original published clustering."}
 ceObj <- addClusters(ceObj, colData(ceObj)$publishedClusters, 
                      clusterLabel = "publishedClusters")
+
+## change default color to match with Figure 7
+clusterLegend(ceObj)$publishedClusters[, "color"] <- 
+  col_clus[clusterLegend(ceObj)$publishedClusters[, "name"]]
+
 plotBarplot(ceObj, whichClusters=c("combineMany","publishedClusters"),
-            xlab = "", legend = F) 
+            xlab = "", legend = FALSE)
 ```
  
 Figure \@ref(fig:heatmapsClusters) displays a heatmap of the normalized expression measures for the 1,000 most variable genes, where cells are clustered according to the RSEC consensus.
@@ -420,7 +424,7 @@ c3 | mSUS | red | original 4, 7
 c4 | Contaminants | orange | original -2 
 c5 | mOSN | purple | original 9, 12
 c6 | Immature Neuron | brown | original 10, 14
-c7 | MV | cian | original 15
+c7 | MV | cyan | original 15
 
 Cells in cluster `c4` have a cluster label of `-2` in the original published clustering, meaning that they were not assigned to any cluster. These cells were actually identified as non-sensory contaminants, as they overexpress gene `Reg3g` (see Figure S1 from [@Fletcher2017] and Figure \@ref(fig:boxplotReg3g)), and were removed from the original published clustering. While it is reassuring that our workflow clustered these cells separately, with no influence on the clustering of the other cells, we removed cluster `c4` to infer lineages and pseudotimes, as cells in this cluster do not participate in the cell differentiation process. Note that our workflow's clustering only captured XXX out of XXX cells overexpressing gene `Reg3g` in cluster `c4` (see Figure \@ref(fig:boxplotReg3g)), however we retain the remaining cells to infer lineages as they did not seem to influence the clustering.
 
@@ -498,6 +502,12 @@ topgenes <- names(sort(gam.pval, decreasing = FALSE))[1:100]
 heatdata <- y[rownames(se) %in% topgenes, order(t, na.last = NA)]
 heatclus <- cl[order(t, na.last = NA)]
 ce <- clusterExperiment(heatdata, heatclus, transformation = identity)
+
+#match to existing colors
+cols <- clusterLegend(ceObj)$combineMany[, "color"]
+names(cols) <- clusterLegend(ceObj)$combineMany[, "name"]
+clusterLegend(ce)$cluster1[, "color"] <- cols[clusterLegend(ce)$cluster1[, "name"]]
+
 plotHeatmap(ce, clusterSamplesData = "orderSamplesValue", breaks = .99)
 ```
 
