@@ -1,5 +1,7 @@
 # Bioconductor workflow for single-cell RNA sequencing: Normalization, dimensionality reduction, clustering, and lineage inference
 
+[![DOI](https://zenodo.org/badge/90190906.svg)](https://zenodo.org/badge/latestdoi/90190906)
+
 This repository is designed to provide a tutorial for the analysis of scRNA-seq data in R. It covers four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages; and (4) DE analysis along lineages. The workflow is general and flexible, allowing the user to sustitute the statistical method used in each step by a different method. We hope our proposed workflow will ease technical aspects of scRNA-seq data analysis and help with the discovery of novel biological insights.
 
 
