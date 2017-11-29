@@ -332,6 +332,8 @@ The next step of the workflow is to cluster the cells according to the low-dimen
 
 Note that the defaults in `RSEC` are designed for input data that are the actual (normalized) counts. Here, we are applying `RSEC` instead to the low-dimensional `W` matrix from ZINB-WaVE, for which we make a separate `SummarizedExperiment` object. For this reason, we choose to not use certain options in `RSEC`. In particular, we do not use the default dimensionality reduction step, since our input `W` is already in a space of reduced dimension. Specifically, `RSEC` offers a dimensionality reduction option for the input to both the clustering routines (`dimReduce`) and the construction of the hiearchy between the clusters (`dendroReduce`). We also skip the option to merge our clusters based on the amount of differential gene expression between clusters.
 
+EP: We could add back in the mergeClusters step now that we don't have the W in the data slot. I haven't done that yet because we want to just recreate the previous, but it would be reasonable now.
+
 ```{r addW}
 reducedDim(dataObj,"zinbwave50")<-W
 ```
