@@ -27,7 +27,7 @@ output: BiocWorkflowTools::f1000_article
 
 ```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
 if(packageVersion("zinbwave")<"0.99.6") stop("must have current devel version to avoid bugs")
-if(packageVersion("clusterExperiment")<"1.3.2") stop("must have current devel version to avoid bugs")
+if(packageVersion("clusterExperiment")<"1.5.0-9005") stop("must have current devel version to avoid bugs")
 if(packageVersion("scone")<"1.1.2") stop("must have current devel version to avoid bugs")
 
 library(BiocStyle)
@@ -174,22 +174,24 @@ metadata <- data.frame("Experiment" = bio,
 # Symbol for cells not assigned to a lineage in original data
 metadata$publishedClusters[is.na(metadata$publishedClusters)] <- -2
 
-se <- SummarizedExperiment(assays = list(counts = E),
+dataObj <- SummarizedExperiment(assays = list(counts = E),
                            colData = metadata)
-se
+dataObj
 ```
+
+EP: changing 'se' to 'dataObj' because it changes classes. Also can search and replace 'dataObj' and not 'se'
 
 Using the Bioconductor R package `scone`, we remove low-quality cells according to the quality control filter implemented in the function `metric_sample_filter` and based on the following criteria (Figure \@ref(fig:scone)): (1) Filter out samples with low total number of reads or low alignment percentage and (2) filter out samples with a low detection rate for housekeeping genes. See the [scone vignette](https://www.bioconductor.org/packages/release/bioc/vignettes/scone/inst/doc/sconeTutorial.html) for details on the filtering procedure.
 
 ```{r scone, fig.cap="SCONE: Filtering of low-quality cells."}
 # QC-metric-based sample-filtering
 data("housekeeping")
-hk = rownames(se)[toupper(rownames(se)) %in% housekeeping$V1]
+hk = rownames(dataObj)[toupper(rownames(dataObj)) %in% housekeeping$V1]
 
-mfilt <- metric_sample_filter(assay(se), 
-                              nreads = colData(se)$NREADS,
-                              ralign = colData(se)$RALIGN,
-                              pos_controls = rownames(se) %in% hk,
+mfilt <- metric_sample_filter(assay(dataObj), 
+                              nreads = colData(dataObj)$NREADS,
+                              ralign = colData(dataObj)$RALIGN,
+                              pos_controls = rownames(dataObj) %in% hk,
                               zcut = 3, mixture = FALSE,
                               plot = TRUE)
 ```
@@ -197,22 +199,26 @@ mfilt <- metric_sample_filter(assay(se),
 ```{r sconeFilt}
 # Simplify to a single logical
 mfilt <- !apply(simplify2array(mfilt[!is.na(mfilt)]), 1, any)
-se <- se[, mfilt]
-dim(se)
+dataObj <- dataObj[, mfilt]
+dim(dataObj)
 ```
 
-After sample filtering, we are left with `r ncol(se)` good quality cells.
+After sample filtering, we are left with `r ncol(dataObj)` good quality cells.
 
 Finally, for computational efficiency, we retain only the 1,000 most variable genes. This seems to be a reasonnable choice for the illustrative purpose of this workflow, as we are able to recover the biological signal found in the published analysis ([@Fletcher2017]). In general, however, we recommend care in selecting a gene filtering scheme, as an appropriate choice is dataset-dependent. 
 
 
 ```{r}
 # Filtering to top 1,000 most variable genes
-vars <- rowVars(log1p(assay(se)))
-names(vars) <- rownames(se)
+vars <- rowVars(log1p(assay(dataObj)))
+names(vars) <- rownames(dataObj)
 vars <- sort(vars, decreasing = TRUE)
-core <- se[names(vars)[1:1000],]
+core <- dataObj[names(vars)[1:1000],]
 ```
+
+EP: If use SingleCellFilter (or davide adds to singleCellExperiment) could do this in 1 line.
+
+EP: Why do we create 'core' rather than just replace 'dataObj'
 
 ## Dataset structure
 
@@ -221,6 +227,7 @@ Overall, after the above pre-processing steps, our dataset has 1,000 genes and 7
 ```{r}
 core
 ```
+
 
 Metadata for the cells are stored in the slot `colData` from the `SummarizedExperiment` object. Cells were processed in 18 different batches.
 
@@ -263,7 +270,7 @@ knitr::include_graphics("zinb_schema.png")
 As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the users include more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
 
 ```{r zinb}
-print(system.time(se <- zinbwave(core, K = 50, X = "~ Batch",  
+print(system.time(dataObj <- zinbwave(core, K = 50, X = "~ Batch",  
                                  residuals = TRUE,
                                  normalizedValues = TRUE)))
 ```
@@ -273,7 +280,7 @@ print(system.time(se <- zinbwave(core, K = 50, X = "~ Batch",
 The function `zinbwave` returns a `SummarizedExperiment` object that includes normalized expression measures, defined as deviance residuals from the fit of the ZINB-WaVE model with user-specified gene- and cell-level covariates. Such residuals can be used for visualization purposes (e.g., in heatmaps, boxplots). Note that, in this case, the low-dimensional matrix `W` is not included in the computation of residuals to avoid the removal of the biological signal of interest.
 
 ```{r norm}
-norm <- assays(se)$normalizedValues
+norm <- assays(dataObj)$normalizedValues
 norm[1:3,1:3]
 ```
 
@@ -296,6 +303,14 @@ plot(pca$x, col = col_batch[batch], pch = 20, main = "")
 plot(pca$x, col = col_clus[as.character(publishedClusters)], pch = 20, main = "")
 ```
 
+We are going to set these normalized values to be our first assay, so that they become the default in future plots.
+
+```{r setNormAssay}
+assay(dataObj)<-assays(dataObj)$normalizedValues
+```
+
+EP: This saves a lot of trouble with the plotHeatmap, etc. The code needs to be fixed so *reorders* the assays, rather than what I've done, which is just replace the first. I don't have the object in front of me to be able to do it (it might make sense for me to add option to different assays in clusterExperiment, but I'm not going to do that right now.)
+
 ### Dimensionality reduction
 
 The `zinbwave` function can also be used to perform dimensionality reduction, where, in this workflow, the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results in a scatterplot with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).
@@ -316,11 +331,18 @@ legend(x = "topleft", legend = unique(names(col_clus)), cex = .5,
 The next step of the workflow is to cluster the cells according to the low-dimensional matrix `W` computed in the previous step. We use the resampling-based sequential ensemble clustering (RSEC) framework implemented in the `RSEC` function from the Bioconductor R package `clusterExperiment`. Specifically, given a set of user-supplied base clustering algorithms and associated tuning parameters (e.g., _k_-means, with a range of values for _k_), RSEC generates a collection of candidate clusterings, with the option of resampling cells and using a sequential tight clustering procedure as in [@Tseng2005]. A consensus clustering is obtained based on the levels of co-clustering of samples across the candidate clusterings. The consensus clustering is further condensed by merging similar clusters, which is done by creating a hierarchy of clusters, working up the tree, and testing for differential expression between sister nodes, with nodes of insufficient DE collapsed. As in supervised learning, resampling greatly improves the stability of clusters and considering an ensemble of methods and tuning parameters allows us to capitalize on the different strengths of the base algorithms and avoid the subjective selection of tuning parameters. 
 
 Note that the defaults in `RSEC` are designed for input data that are the actual (normalized) counts. Here, we are applying `RSEC` instead to the low-dimensional `W` matrix from ZINB-WaVE, for which we make a separate `SummarizedExperiment` object. For this reason, we choose to not use certain options in `RSEC`. In particular, we do not use the default dimensionality reduction step, since our input `W` is already in a space of reduced dimension. Specifically, `RSEC` offers a dimensionality reduction option for the input to both the clustering routines (`dimReduce`) and the construction of the hiearchy between the clusters (`dendroReduce`). We also skip the option to merge our clusters based on the amount of differential gene expression between clusters.
+
+```{r addW}
+reducedDim(dataObj,"zinbwave50")<-W
+```
+
+EP: If zinbwave already has been updated, this above code is probably not needed since its aready there.
   
+EP: Note that we need to see whether clusterExperiment retains all of the different assays or not. It should in principle, but its not something I've tested.
+
 ```{r rsec_50}
-seObj <- SummarizedExperiment(t(W), colData = colData(core))
-print(system.time(ceObj <- RSEC(seObj, k0s = 4:15, alphas = c(0.1),
-                                betas = 0.8, dimReduce="none",
+print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
+                                betas = 0.8, dimReduce="zinbwave50",
                                 clusterFunction = "hierarchical01", minSizes=1,
                                 ncores = NCORES, isCount=FALSE,
                                 dendroReduce="none",dendroNDims=NA,
@@ -336,36 +358,38 @@ print(system.time(ceObj <- RSEC(seObj, k0s = 4:15, alphas = c(0.1),
 The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examineCombineMany)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap accross rows. The first row correspond to a consensus clustering across all candidate clusterings.
 
 ```{r examineCombineMany, fig.cap="RSEC: Candidate clusterings found using the function RSEC from the clusterExperiment package."}
-plotClusters(ceObj, colPalette = c(bigPalette, rainbow(199)))
+plotClusters(dataObj)
 ```
+
+EP: I've updated so that the default has >500 colors, so don't need the colPalette command, I hope.
 
 The `plotCoClustering` function produces a heatmap of the co-clustering matrix, which records, for each pair of cells, the proportion of times they were clustered together across the candidate clusters (Figure \@ref(fig:plotcoclust)). 
 
 ```{r plotcoclust, fig.cap="RSEC: Heatmap of co-clustering matrix."}
-plotCoClustering(ceObj)
+plotCoClustering(dataObj)
 ```
 
 The distribution of cells across the consensus clusters can be visualized in Figure \@ref(fig:barplotOurs) and is as follows:
 
 ```{r tableclust}
-table(primaryClusterNamed(ceObj))
+table(primaryClusterNamed(dataObj))
 ```
 
 ```{r barplotOurs, fig.cap="RSEC: Barplot of number of cells per cluster for our workflow's RSEC clustering."}
-plotBarplot(ceObj, legend = FALSE) 
+plotBarplot(dataObj, legend = FALSE) 
 ```
 
 The distribution of cells in our workflow's clustering overall agrees with that in the original published clustering (Figure \@ref(fig:addPublishedClusters)), the main difference being that several of the published clusters were merged here into single clusters. This discrepancy is likely caused by the fact that we started with the top 1,000 genes, which might not be enough to discriminate between closely related clusters.
 
 ```{r addPublishedClusters, fig.cap="RSEC: Barplot of number of cells per cluster, for our workflow's RSEC clustering, color-coded by original published clustering."}
-ceObj <- addClusters(ceObj, colData(ceObj)$publishedClusters, 
+dataObj <- addClusters(dataObj, colData(dataObj)$publishedClusters, 
                      clusterLabel = "publishedClusters")
 
 ## change default color to match with Figure 7
-clusterLegend(ceObj)$publishedClusters[, "color"] <- 
-  col_clus[clusterLegend(ceObj)$publishedClusters[, "name"]]
+clusterLegend(dataObj)$publishedClusters[, "color"] <- 
+  col_clus[clusterLegend(dataObj)$publishedClusters[, "name"]]
 
-plotBarplot(ceObj, whichClusters=c("combineMany","publishedClusters"),
+plotBarplot(dataObj, whichClusters=c("combineMany","publishedClusters"),
             xlab = "", legend = FALSE)
 ```
  
@@ -373,32 +397,26 @@ Figure \@ref(fig:heatmapsClusters) displays a heatmap of the normalized expressi
 
 ```{r heatmapsClusters, fig.cap="RSEC: Heatmap of the normalized expression measures for the 1,000 most variable genes, where rows correspond to genes and columns to cells ordered by RSEC clusters."}
 # Set colors for cell clusterings
-colData(ceObj)$publishedClusters <- as.factor(colData(ceObj)$publishedClusters)
-origClusterColors <- bigPalette[1:nlevels(colData(ceObj)$publishedClusters)]
-experimentColors <- bigPalette[1:nlevels(colData(ceObj)$Experiment)]
-batchColors <- bigPalette[1:nlevels(colData(ceObj)$Batch)]
+experimentColors <- bigPalette[1:nlevels(colData(dataObj)$Experiment)]
+batchColors <- bigPalette[1:nlevels(colData(dataObj)$Batch)]
 metaColors <- list("Experiment" = experimentColors,
-                   "Batch" = batchColors,
-                   "publishedClusters" = origClusterColors)
+                   "Batch" = batchColors)
 
-plotHeatmap(ceObj, visualizeData = assays(se)$normalizedValues,
+plotHeatmap(dataObj, 
             whichClusters = "primary", clusterFeaturesData = "all",
             clusterSamplesData = "dendrogramValue", breaks = 0.99,
-            sampleData = c("publishedClusters", "Batch", "Experiment"),
+            sampleData = c("Batch", "Experiment"),
             clusterLegend = metaColors, annLegend = FALSE, main = "")
 ```
+
+EP: publishedClusters is saved as a cluster, so don't need to set it up. Now normalized should be default assay, so not need 'visualizeData'
 
 Finally, we can visualize the cells in a two-dimensional space using the MDS of the low-dimensional matrix `W` and coloring the cells according to their newly-found RSEC clusters (Figure \@ref(fig:mdsWce)); this is anologous to Figure \@ref(fig:mdsW) for the original published clusters.
 
 ```{r mdsWce, fig.cap="RSEC: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by RSEC clustering."}
-palDF <- ceObj@clusterLegend[[1]]
-pal <- palDF[, "color"]
-names(pal) <- palDF[, "name"]
-pal["-1"] = "transparent"
-plot(fit$points, col = pal[primaryClusterNamed(ceObj)], main = "", pch = 20,
-     xlab = "Component1", ylab = "Component2")
-legend(x = "topleft", legend = names(pal), cex = .5,
-       fill = pal, title = "Sample")
+plotDimReduce(dataObj,whichCluster="primary",dimReduce="zinbwave50",pch=20,
+	xlab = "Component1", ylab = "Component2",legendTitle="Sample",main=""
+)
 ```
 
 ## Cell lineage and pseudotime inference: Slingshot
@@ -410,7 +428,7 @@ The two steps of the Slingshot algorithm are implemented in the functions `getLi
 From the original published work, we know that the start cluster should correspond to HBCs and the end clusters to MV, mOSN, and mSUS cells. Additionally, we know that GBCs should be at a junction before the differentiation between MV and mOSN cells (Figure \@ref(fig:stemcelldiff)). The correspondance between the clusters we found here and the original clusters is as follows.
 
 ```{r tabagain}
-table(data.frame(original = publishedClusters, ours = primaryClusterNamed(ceObj)))
+table(data.frame(original = publishedClusters, ours = primaryClusterNamed(dataObj)))
 ```
 
 Cluster name | Description | Color | Correspondence
@@ -427,36 +445,40 @@ Cells in cluster `c4` have a cluster label of `-2` in the original published clu
 
 
 ```{r boxplotReg3g, fig.width=6, fig.height=4, fig.cap="RSEC: Boxplots of the log count of gene Reg3g stratified by cluster."}
-c4 <- rep("other clusters", ncol(se)) 
-c4[primaryClusterNamed(ceObj) == "c4"] <- "cluster c4"
-boxplot(log1p(assay(se)["Reg3g", ]) ~ primaryClusterNamed(ceObj), 
+# c4 <- rep("other clusters", ncol(se))
+# c4[primaryClusterNamed(dataObj) == "c4"] <- "cluster c4"
+boxplot(log1p(assay(se)["Reg3g", ]) ~ primaryClusterNamed(dataObj), 
         ylab = "Reg3g log counts", cex.axis = .8, cex.lab = .8)
 ```
+
+EP: not sure why needed 'c4' object. This is a useful plot and rather messy, so I might make a plotGeneBoxplot function.
 
 To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the Slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of Slingshot, where we only provide the identity of the start cluster but not of the end clusters.
 
 ```{r}
-our_cl <- primaryClusterNamed(ceObj)
-cl <- our_cl[!our_cl %in% c("-1", "c4")]
-pal <- pal[!names(pal) %in% c("-1", "c4")]
-X <- W[!our_cl %in% c("-1", "c4"), ]
+pseudoCe<-dataObj[,!primaryClusterNamed(dataObj) %in% c("-1", "c4")]
+X <- reducedDim(pseudoCe,type="zinbwave50")
 mds <- cmdscale(dist(X), eig = TRUE, k = 4)
 X <- mds$points
-
-lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1")
+lineages <- getLineages(X, clusterLabels = primaryClusterNamed(pseudoCe), start.clus = "c1")
 ```
+
+EP: created a pseudoCe to subset to the samples for the lineage. Simplifies code enormously and as long as we don't change it, doesn't use additional memory, I think.
 
 Before fitting the simultaneous principal curves, we examine the global structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
 ```{r tree, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space, with connecting lines between cluster centers representing the inferred global lineage structure."}
-pairs(lineages, type="lineages", col = pal[cl])
+colorCl<-convertClusterLegend(pseudoCe,whichCluster="primary",output="matrixColors")
+pairs(lineages, type="lineages", col = colorCl)
 ```
+
+EP: convertClusterLegend does the transformation into vector of colors. However, output may be matrix, in which case need to add a `[,1]` to the above code.
 
 Having found the global lineage structure, we now construct a set of smooth, branching curves in order to infer the pseudotime variables. Simultaneous principal curves are constructed from the individual cells along each lineage, rather than the cell clusters. This makes them more stable and better suited for assigning cells to lineages. The final curves are shown in Figure \@ref(fig:curves).
 
 ```{r curves, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space, with smooth curves representing each inferred lineage."}
 lineages <- getCurves(lineages)
-pairs(lineages, type="curves", col = pal[cl])
+pairs(lineages, type="curves", col = colorCl)
 ```
 
 ```{r lineages}
@@ -467,11 +489,11 @@ In the workflow, we recover a reasonable ordering of the clusters using the unsu
 
 
 ```{r slingshotsupervised, eval=FALSE}
-lineages <- getLineages(X, clusterLabels = cl, start.clus = "c1",
+lineages <- getLineages(X, clusterLabels = primaryClusterNamed(pseudoCe), start.clus = "c1",
                          end.clus = c("c3", "c7"))
 lineagees <- getCurves(lineages)
-pairs(lineages, type="curves", col = pal[primaryClusterNamed(ceObj)])
-pairs(lineages, type="lineages", col = pal[primaryClusterNamed(ceObj)], 
+pairs(lineages, type="curves", col = colorCl)
+pairs(lineages, type="lineages", col = colorCl, 
       show.constraints = TRUE)
 
 lineages
@@ -485,7 +507,7 @@ More formally, for each lineage, we use the robust local regression method loess
 
 ```{r fitgam}
 t <- pseudotime(lineages)[,1]
-y <- assays(se)$normalizedValues[, !our_cl %in% c("-1", "c4")]
+y <- assay(pseudoCe)
 gam.pval <- apply(y,1,function(z){
   d <- data.frame(z=z, t=t)
   tmp <- gam(z ~ lo(t), data=d)
@@ -494,20 +516,15 @@ gam.pval <- apply(y,1,function(z){
 })
 ```
 
+EP: Since changed NormalizedValues to the main assay, this cleans up the code above and below.
 
 ```{r heatmapsignificant, fig.cap="DE: Heatmap of the normalized expression measures for the 100 most significantly DE genes for the neuronal lineage, where rows correspond to genes and columns to cells ordered by pseudotime."}
 topgenes <- names(sort(gam.pval, decreasing = FALSE))[1:100]
-heatdata <- y[rownames(se) %in% topgenes, order(t, na.last = NA)]
-heatclus <- cl[order(t, na.last = NA)]
-ce <- clusterExperiment(heatdata, heatclus, transformation = identity)
-
-#match to existing colors
-cols <- clusterLegend(ceObj)$combineMany[, "color"]
-names(cols) <- clusterLegend(ceObj)$combineMany[, "name"]
-clusterLegend(ce)$cluster1[, "color"] <- cols[clusterLegend(ce)$cluster1[, "name"]]
-
-plotHeatmap(ce, clusterSamplesData = "orderSamplesValue", breaks = .99)
+orderSamples(pseudoCe)<-order(t,na.last=TRUE)
+plotHeatmap(pseudoCe[,!is.na(t)], clusterSamplesData = "orderSamplesValue", breaks = .99)
 ```
+
+The above code should take care of the ordering and NA values. Note that subseting a ClusterExperiment object is suppose to also subset the orderSamples value correctly. Let me know if that is not the case. 
 
 ## Further developments
 
