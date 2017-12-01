@@ -27,7 +27,7 @@ output: BiocWorkflowTools::f1000_article
 
 ```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
 if(packageVersion("zinbwave")<"0.99.6") stop("must have current devel version to avoid bugs")
-if(packageVersion("clusterExperiment")<"1.5.0-9006") stop("must have current devel version to avoid bugs")
+if(packageVersion("clusterExperiment")<"1.5.0-9007") stop("must have current devel version to avoid bugs")
 if(packageVersion("scone")<"1.1.2") stop("must have current devel version to avoid bugs")
 
 library(BiocStyle)
@@ -453,11 +453,12 @@ Cells in cluster `c4` have a cluster label of `-2` in the original published clu
 ```{r boxplotReg3g, fig.width=6, fig.height=4, fig.cap="RSEC: Boxplots of the log count of gene Reg3g stratified by cluster."}
 # c4 <- rep("other clusters", ncol(se))
 # c4[primaryClusterNamed(dataObj) == "c4"] <- "cluster c4"
-boxplot(log1p(assay(se)["Reg3g", ]) ~ primaryClusterNamed(dataObj), 
-        ylab = "Reg3g log counts", cex.axis = .8, cex.lab = .8)
+# boxplot(log1p(assay(se)["Reg3g", ]) ~ primaryClusterNamed(dataObj),
+#         ylab = "Reg3g log counts", cex.axis = .8, cex.lab = .8)
+plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g")
 ```
 
-EP: not sure why needed 'c4' object. This is a useful plot and rather messy, so I might make a plotGeneBoxplot function.
+EP: not sure why needed 'c4' object. This is new function. Tell me if you run into problems. 
 
 To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the Slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of Slingshot, where we only provide the identity of the start cluster but not of the end clusters.
 
