@@ -48,6 +48,8 @@ Here, we propose an integrated workflow for dowstream analysis, with the followi
 knitr::include_graphics("schema_workflow.png")
 ```
 
+EP: I have only updated the code, not the text. The text needs adaptation, especially future directions and references to `SummarizedExperiment` which should be `SingleCellExperiment`.
+
 # Analysis of olfactory stem cell differentiation using scRNA-seq data
 
 ## Overview
@@ -87,6 +89,8 @@ set.seed(20)
 Note that in order to successfully run the workflow, we need the devel versions
 of the Bioconductor packages `scone (>=1.1.2)`, `zinbwave (>=0.99.6)`, and `clusterExperiment (>=1.6)`. We recommend running Bioconductor 3.6 (currently the devel version; see https://www.bioconductor.org/developers/how-to/useDevel/).
 
+EP: Should update these.
+
 ## Parallel computating
 
 To give an idea to the users of the time needed to run the workflow, function `system.time` was used to report computation times for the time consuming functions. Computations were performed with 2 cores on a MacBook Pro (early 2015) with a 2.7 GHz Intel Core i5 processor and 8 GB of RAM. The `BiocParallel` package is used to allow for parallel computing in `zinbwave` function. Users with a different operating system may change the package used for parallel computing and the `NCORES` variable below.
@@ -105,6 +109,7 @@ if (mysystem == "Darwin"){
 }
 ```
 
+EP: Note that clusterExperiment uses `parallel` package, so might should update this. 
 
 ## Pre-processing
 
@@ -141,6 +146,8 @@ dim(E)
 ```
 
 We remove the ERCC spike-in sequences and the CreER gene, as the latter corresponds to the estrogen receptor fused to Cre recombinase (Cre-ER), which is used to activate HBCs into differentiation following injection of tamoxifen (see [@Fletcher2017] for details).
+
+EP: There's code in SingleCellExperiment for spike-ins. We should use it, though I'm not familiar with it. 
 
 ```{r}
 # Remove ERCC and CreER genes
@@ -311,6 +318,8 @@ assay(dataObj)<-assays(dataObj)$normalizedValues
 
 EP: This saves a lot of trouble with the plotHeatmap, etc. The code needs to be fixed so *reorders* the assays, rather than what I've done, which is just replace the first. I don't have the object in front of me to be able to do it (it might make sense for me to add option to different assays in clusterExperiment, but I'm not going to do that right now.)
 
+EP: Should probably address these normalized values, especially to more strongly make clear that shouldn't use these for clustering, just for visualization. The way its stated it sounds like dimensionality reduction is an "also", when in fact it is the main point and the normalized values are the afterthought. Might consider reordering the sections to more clearly demonstrate this and put dimensionality reduction first.  
+
 ### Dimensionality reduction
 
 The `zinbwave` function can also be used to perform dimensionality reduction, where, in this workflow, the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results in a scatterplot with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).
@@ -343,7 +352,7 @@ EP: Note that we need to see whether clusterExperiment retains all of the differ
 
 EP: Currently isCount=FALSE. Does that make sense for the normalized values, or should we set it to TRUE (it shouldn't affect the clustering, since the clustering is only on the reducedDim slot now, but could affect downstream plots, etc.).
 
-EP: We could add back in the mergeClusters step now that we don't have the W in the data slot. I haven't done that yet because we want to just recreate the previous, but it would be reasonable now. It would be based on doing DE of the normalized values, however, because I put them into the main assay slot, so we might need to think about this multiple assay question more seriously.  But it would be nice to show that you can do that for this setting. Once this is running I can come back to it.
+EP: We could add back in the mergeClusters step now that we don't have the W in the data slot. I haven't done that yet because we want to just recreate the previous, but it would be reasonable now. It would be based on doing DE of the normalized values, however, because I put them into the main assay slot, so we might need to think about this multiple assay question more seriously. But then again, I don't know the workflow for the DE part, so maybe we want to leave it out.  But it would be nice to show that you can do that for this setting. Once this workflow is running I can come back to it.
 
 
 ```{r rsec_50}
@@ -402,7 +411,7 @@ plotBarplot(dataObj, whichClusters=c("combineMany","publishedClusters"),
 Figure \@ref(fig:heatmapsClusters) displays a heatmap of the normalized expression measures for the 1,000 most variable genes, where cells are clustered according to the RSEC consensus.
 
 ```{r heatmapsClusters, fig.cap="RSEC: Heatmap of the normalized expression measures for the 1,000 most variable genes, where rows correspond to genes and columns to cells ordered by RSEC clusters."}
-# Set colors for cell clusterings
+# Set colors for additional sample data
 experimentColors <- bigPalette[1:nlevels(colData(dataObj)$Experiment)]
 batchColors <- bigPalette[1:nlevels(colData(dataObj)$Batch)]
 metaColors <- list("Experiment" = experimentColors,
@@ -455,7 +464,7 @@ Cells in cluster `c4` have a cluster label of `-2` in the original published clu
 # c4[primaryClusterNamed(dataObj) == "c4"] <- "cluster c4"
 # boxplot(log1p(assay(se)["Reg3g", ]) ~ primaryClusterNamed(dataObj),
 #         ylab = "Reg3g log counts", cex.axis = .8, cex.lab = .8)
-plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g")
+plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g",ylab = "Reg3g log counts", cex.axis = .8, cex.lab = .8)
 ```
 
 EP: not sure why needed 'c4' object. This is new function. Tell me if you run into problems. 
@@ -514,7 +523,7 @@ More formally, for each lineage, we use the robust local regression method loess
 
 ```{r fitgam}
 t <- pseudotime(lineages)[,1]
-y <- assay(pseudoCe)
+y <- transformData(pseudoCe)
 gam.pval <- apply(y,1,function(z){
   d <- data.frame(z=z, t=t)
   tmp <- gam(z ~ lo(t), data=d)
@@ -523,13 +532,15 @@ gam.pval <- apply(y,1,function(z){
 })
 ```
 
-EP: Since changed NormalizedValues to the main assay, this cleans up the code above and below.
+EP: Since changed NormalizedValues to the main assay, this cleans up the code above and below. I've used the `transformData` command, which will not do anything if isCount=FALSE above, but will convert to right if we change isCount=TRUE. It's better to use that command than `assay` for that reason. Might should add comment in code or text explaining this.
 
 ```{r heatmapsignificant, fig.cap="DE: Heatmap of the normalized expression measures for the 100 most significantly DE genes for the neuronal lineage, where rows correspond to genes and columns to cells ordered by pseudotime."}
 topgenes <- names(sort(gam.pval, decreasing = FALSE))[1:100]
 orderSamples(pseudoCe)<-order(t,na.last=TRUE)
-plotHeatmap(pseudoCe[,!is.na(t)], clusterSamplesData = "orderSamplesValue", breaks = .99)
+plotHeatmap(pseudoCe[topgenes,!is.na(t)], clusterSamplesData = "orderSamplesValue", breaks = .99)
 ```
+
+EP: note the above with do heirarchcial clustering of the top genes. If want them to stay in order given, should give `clusterFeaturesData=topgenes` (I think that is the argument)
 
 The above code should take care of the ordering and NA values. Note that subseting a ClusterExperiment object is suppose to also subset the orderSamples value correctly. Let me know if that is not the case. 
 
