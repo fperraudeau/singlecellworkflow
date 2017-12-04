@@ -186,7 +186,8 @@ dataObj <- SummarizedExperiment(assays = list(counts = E),
 dataObj
 ```
 
-EP: changing 'se' to 'dataObj' because it changes classes. Also can search and replace 'dataObj' and not 'se'
+EP: changing 'se' to 'dataObj' because it changes classes. Also can search and replace 'dataObj' and not 'se'.  
+FP: good idea.
 
 Using the Bioconductor R package `scone`, we remove low-quality cells according to the quality control filter implemented in the function `metric_sample_filter` and based on the following criteria (Figure \@ref(fig:scone)): (1) Filter out samples with low total number of reads or low alignment percentage and (2) filter out samples with a low detection rate for housekeeping genes. See the [scone vignette](https://www.bioconductor.org/packages/release/bioc/vignettes/scone/inst/doc/sconeTutorial.html) for details on the filtering procedure.
 
@@ -220,26 +221,26 @@ Finally, for computational efficiency, we retain only the 1,000 most variable ge
 vars <- rowVars(log1p(assay(dataObj)))
 names(vars) <- rownames(dataObj)
 vars <- sort(vars, decreasing = TRUE)
-core <- dataObj[names(vars)[1:1000],]
+dataObj <- dataObj[names(vars)[1:1000],]
 ```
 
 EP: If use SingleCellFilter (or davide adds to singleCellExperiment) could do this in 1 line.
 
-EP: Why do we create 'core' rather than just replace 'dataObj'
+EP: Why do we create 'core' rather than just replace 'dataObj'. I agree, I think that it is unnecessary. I changed 'core' to dataObj.
 
 ## Dataset structure
 
 Overall, after the above pre-processing steps, our dataset has 1,000 genes and 747 cells.
 
 ```{r}
-core
+dataObj
 ```
 
 
 Metadata for the cells are stored in the slot `colData` from the `SummarizedExperiment` object. Cells were processed in 18 different batches.
 
 ```{r batch}
-batch <- colData(core)$Batch
+batch <- colData(dataObj)$Batch
 col_batch = c(brewer.pal(9, "Set1"), brewer.pal(8, "Dark2"), 
               brewer.pal(8, "Accent")[1])
 names(col_batch) = unique(batch)
@@ -249,7 +250,7 @@ table(batch)
 In the original work [@Fletcher2017], cells were clustered into 14 different clusters, with 151 cells not assigned to any cluster (i.e., cluster label of `-2`). 
 
 ```{r original}
-publishedClusters <- colData(core)[, "publishedClusters"]
+publishedClusters <- colData(dataObj)[, "publishedClusters"]
 col_clus <- c("transparent", "#1B9E77", "antiquewhite2", "cyan", "#E7298A", 
               "#A6CEE3", "#666666", "#E6AB02", "#FFED6F", "darkorchid2", 
               "#B3DE69", "#FF7F00", "#A6761D", "#1F78B4")
@@ -277,9 +278,7 @@ knitr::include_graphics("zinb_schema.png")
 As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the users include more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
 
 ```{r zinb}
-print(system.time(dataObj <- zinbwave(core, K = 50, X = "~ Batch",  
-                                 residuals = TRUE,
-                                 normalizedValues = TRUE)))
+print(system.time(dataObj <- zinbwave(dataObj, K = 50, X = "~ Batch", residuals = TRUE, normalizedValues = TRUE)))
 ```
 
 ### Normalization
@@ -319,20 +318,21 @@ assay(dataObj)<-assays(dataObj)$normalizedValues
 EP: This saves a lot of trouble with the plotHeatmap, etc. The code needs to be fixed so *reorders* the assays, rather than what I've done, which is just replace the first. I don't have the object in front of me to be able to do it (it might make sense for me to add option to different assays in clusterExperiment, but I'm not going to do that right now.)
 
 EP: Should probably address these normalized values, especially to more strongly make clear that shouldn't use these for clustering, just for visualization. The way its stated it sounds like dimensionality reduction is an "also", when in fact it is the main point and the normalized values are the afterthought. Might consider reordering the sections to more clearly demonstrate this and put dimensionality reduction first.  
+FP: Agree, let's keep it in mind for once the workflow runs smoothly.
 
 ### Dimensionality reduction
 
-The `zinbwave` function can also be used to perform dimensionality reduction, where, in this workflow, the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results in a scatterplot with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).
+The `zinbwave` function can also be used to perform dimensionality reduction, where, in this workflow, the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results in a scatterplot with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).  
+
+FP: W can now be accessed using reducedDim function. Two functions called reducedDim are loaded in the workflow: one from slingshot and the other one from singleCellExperiment.
 
 ```{r mdsW, fig.cap="ZINB-WaVE: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by original published clustering."}
-W <- colData(se)[, grepl("^W", colnames(colData(se)))]
-W <- as.matrix(W)
+W <- SingleCellExperiment::reducedDim(dataObj)
 d <- dist(W)
 fit <- cmdscale(d, eig = TRUE, k = 2)
 plot(fit$points, col = col_clus[as.character(publishedClusters)], main = "",
      pch = 20, xlab = "Component 1", ylab = "Component 2")
-legend(x = "topleft", legend = unique(names(col_clus)), cex = .5,
-       fill = unique(col_clus), title = "Sample")
+legend(x = "topleft", legend = unique(names(col_clus)), cex = .5, fill = unique(col_clus), title = "Sample")
 ```
 
 ## Cell clustering: RSEC
@@ -346,13 +346,16 @@ Note that the defaults in `RSEC` are designed for input data that are the actual
 reducedDim(dataObj,"zinbwave50")<-W
 ```
 
-EP: If zinbwave already has been updated, this above code is probably not needed since its aready there.
+EP: If zinbwave already has been updated, this above code is probably not needed since its aready there.  
+FP: As the name/type "zinbwave50" is then needed in the RSEC function, we might need to keep this line.
   
 EP: Note that we need to see whether clusterExperiment retains all of the different assays or not. It should in principle, but its not something I've tested. Also, I purposefully didn't give the parameter `nReducedDims` because I think it should automatically use the max saved in object if not designated. If not, let me know. 
 
-EP: Currently isCount=FALSE. Does that make sense for the normalized values, or should we set it to TRUE (it shouldn't affect the clustering, since the clustering is only on the reducedDim slot now, but could affect downstream plots, etc.).
+EP: Currently isCount=FALSE. Does that make sense for the normalized values, or should we set it to TRUE (it shouldn't affect the clustering, since the clustering is only on the reducedDim slot now, but could affect downstream plots, etc.).  
+FP: yes, I think isCount=FALSE makes sense for the normalized values.
 
-EP: We could add back in the mergeClusters step now that we don't have the W in the data slot. I haven't done that yet because we want to just recreate the previous, but it would be reasonable now. It would be based on doing DE of the normalized values, however, because I put them into the main assay slot, so we might need to think about this multiple assay question more seriously. But then again, I don't know the workflow for the DE part, so maybe we want to leave it out.  But it would be nice to show that you can do that for this setting. Once this workflow is running I can come back to it.
+EP: We could add back in the mergeClusters step now that we don't have the W in the data slot. I haven't done that yet because we want to just recreate the previous, but it would be reasonable now. It would be based on doing DE of the normalized values, however, because I put them into the main assay slot, so we might need to think about this multiple assay question more seriously. But then again, I don't know the workflow for the DE part, so maybe we want to leave it out.  But it would be nice to show that you can do that for this setting. Once this workflow is running I can come back to it.  
+FP: I am not sure it makes sense to perform the DE on the normalized values. Intuitively, I would say no, but not sure. We can still show that it is a possibility and write in the text that in this case, it might not make sense. We are working on a DE method for scRNA-seq where we use observational weights computed from the posterior probabilities of the ZINB-WaVE model in bulk RNA tools like edgeR and DESeq2. I think, eventually, it would be nice to be able to use that. Maybe, not for the next next version of the workflow.  
 
 
 ```{r rsec_50}
