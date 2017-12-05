@@ -26,9 +26,9 @@ output: BiocWorkflowTools::f1000_article
 
 
 ```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
-if(packageVersion("zinbwave")<"0.99.6") stop("must have current devel version to avoid bugs")
+if(packageVersion("zinbwave")<"1.1.0") stop("must have current master version to avoid bugs")
 if(packageVersion("clusterExperiment")<"1.5.0-9007") stop("must have current devel version to avoid bugs")
-if(packageVersion("scone")<"1.1.2") stop("must have current devel version to avoid bugs")
+if(packageVersion("scone")<"1.2.0") stop("must have current master version to avoid bugs")
 
 library(BiocStyle)
 library(knitr)
@@ -226,7 +226,8 @@ dataObj <- dataObj[names(vars)[1:1000],]
 
 EP: If use SingleCellFilter (or davide adds to singleCellExperiment) could do this in 1 line.
 
-EP: Why do we create 'core' rather than just replace 'dataObj'. I agree, I think that it is unnecessary. I changed 'core' to dataObj.
+EP: Why do we create 'core' rather than just replace 'dataObj'.   
+FP: I agree, I think that it is unnecessary. I changed 'core' to dataObj.
 
 ## Dataset structure
 
@@ -277,8 +278,13 @@ knitr::include_graphics("zinb_schema.png")
 
 As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the users include more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
 
-```{r zinb}
+```{r zinb,eval=FALSE}
 print(system.time(dataObj <- zinbwave(dataObj, K = 50, X = "~ Batch", residuals = TRUE, normalizedValues = TRUE)))
+```
+
+```{r}
+#save(dataObj, file= 'dataObj.rda')
+load('dataObj.rda')
 ```
 
 ### Normalization
@@ -343,7 +349,7 @@ Note that the defaults in `RSEC` are designed for input data that are the actual
 
 
 ```{r addW}
-reducedDim(dataObj,"zinbwave50")<-W
+SingleCellExperiment::reducedDim(dataObj,"zinbwave50")<-W
 ```
 
 EP: If zinbwave already has been updated, this above code is probably not needed since its aready there.  
@@ -358,7 +364,7 @@ EP: We could add back in the mergeClusters step now that we don't have the W in 
 FP: I am not sure it makes sense to perform the DE on the normalized values. Intuitively, I would say no, but not sure. We can still show that it is a possibility and write in the text that in this case, it might not make sense. We are working on a DE method for scRNA-seq where we use observational weights computed from the posterior probabilities of the ZINB-WaVE model in bulk RNA tools like edgeR and DESeq2. I think, eventually, it would be nice to be able to use that. Maybe, not for the next next version of the workflow.  
 
 
-```{r rsec_50}
+```{r rsec_50,eval=FALSE}
 print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
                                 betas = 0.8, reduceMethod="zinbwave50",
                                 clusterFunction = "hierarchical01", minSizes=1,
@@ -371,6 +377,11 @@ print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
                                 combineProportion = 0.7,
                                 mergeMethod = "none", random.seed=424242,
                                 combineMinSize = 10)))
+```
+
+```{r}
+#save(dataObj, file = 'dataObj_afterRSEC.rda')
+load('dataObj_afterRSEC.rda')
 ```
 
 The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examineCombineMany)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap accross rows. The first row correspond to a consensus clustering across all candidate clusterings.
@@ -387,11 +398,15 @@ The `plotCoClustering` function produces a heatmap of the co-clustering matrix, 
 plotCoClustering(dataObj)
 ```
 
+FP: Ordering does not seem right.  
+
 The distribution of cells across the consensus clusters can be visualized in Figure \@ref(fig:barplotOurs) and is as follows:
 
 ```{r tableclust}
 table(primaryClusterNamed(dataObj))
 ```
+
+FP: we do not get exactly the same number of cells in each cluster. It looks similar though.
 
 ```{r barplotOurs, fig.cap="RSEC: Barplot of number of cells per cluster for our workflow's RSEC clustering."}
 plotBarplot(dataObj, legend = FALSE) 
@@ -411,6 +426,8 @@ plotBarplot(dataObj, whichClusters=c("combineMany","publishedClusters"),
             xlab = "", legend = FALSE)
 ```
  
+FP: compared to the previous version, it seems that there is a lot of black. Would the black coming from the contour of the rectangles in the bars?
+
 Figure \@ref(fig:heatmapsClusters) displays a heatmap of the normalized expression measures for the 1,000 most variable genes, where cells are clustered according to the RSEC consensus.
 
 ```{r heatmapsClusters, fig.cap="RSEC: Heatmap of the normalized expression measures for the 1,000 most variable genes, where rows correspond to genes and columns to cells ordered by RSEC clusters."}
@@ -427,7 +444,9 @@ plotHeatmap(dataObj,
             clusterLegend = metaColors, annLegend = FALSE, main = "")
 ```
 
-EP: publishedClusters is saved as a cluster, so don't need to set it up. Now normalized should be default assay, so not need 'visualizeData'
+EP: publishedClusters is saved as a cluster, so don't need to set it up. Now normalized should be default assay, so not need 'visualizeData'.  
+
+FP: publishedClusters does not appear in the bars.
 
 Finally, we can visualize the cells in a two-dimensional space using the MDS of the low-dimensional matrix `W` and coloring the cells according to their newly-found RSEC clusters (Figure \@ref(fig:mdsWce)); this is anologous to Figure \@ref(fig:mdsW) for the original published clusters.
 
@@ -436,6 +455,8 @@ plotDimReduce(dataObj,whichCluster="primary",reduceMethod="zinbwave50",pch=20,
 	xlab = "Component1", ylab = "Component2",legendTitle="Sample",main=""
 )
 ```
+FP: I get `"reduceMethod" is not a graphical parameter`. I think this plot is different from the previous version.
+
 
 ## Cell lineage and pseudotime inference: Slingshot
 
@@ -470,19 +491,25 @@ Cells in cluster `c4` have a cluster label of `-2` in the original published clu
 plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g",ylab = "Reg3g log counts", cex.axis = .8, cex.lab = .8)
 ```
 
+FP: this plot is fairly different from the previous version. We should see for one cluster that the gene expression for Reg3g is much high that for the other clusters.  
+
 EP: not sure why needed 'c4' object. This is new function. Tell me if you run into problems. 
 
 To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the Slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of Slingshot, where we only provide the identity of the start cluster but not of the end clusters.
 
 ```{r}
-pseudoCe<-dataObj[,!primaryClusterNamed(dataObj) %in% c("-1", "c4")]
+pseudoCe <- dataObj[,!primaryClusterNamed(dataObj) %in% c("-1", "c4")]
 X <- reducedDim(pseudoCe,type="zinbwave50")
 mds <- cmdscale(dist(X), eig = TRUE, k = 4)
 X <- mds$points
 lineages <- getLineages(X, clusterLabels = primaryClusterNamed(pseudoCe), start.clus = "c1")
 ```
 
-EP: created a pseudoCe to subset to the samples for the lineage. Simplifies code enormously and as long as we don't change it, doesn't use additional memory, I think.
+EP: created a pseudoCe to subset to the samples for the lineage. Simplifies code enormously and as long as we don't change it, doesn't use additional memory, I think.  
+FP: I agree. I get an error though when I run line 501:
+`Error in .BasicFunsList[[f]] : no such index at level 1`.
+
+FP: I stooped here.
 
 Before fitting the simultaneous principal curves, we examine the global structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
