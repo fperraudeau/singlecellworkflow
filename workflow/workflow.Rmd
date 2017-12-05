@@ -283,8 +283,8 @@ print(system.time(dataObj <- zinbwave(dataObj, K = 50, X = "~ Batch", residuals 
 ```
 
 ```{r}
-#save(dataObj, file= 'dataObj.rda')
-load('dataObj.rda')
+#save(dataObj, file= 'dataObj_afterZinbwave.rda')
+load('dataObj_afterZinbwave.rda')
 ```
 
 ### Normalization
