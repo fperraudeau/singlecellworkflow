@@ -27,7 +27,7 @@ output: BiocWorkflowTools::f1000_article
 
 ```{r options, echo=FALSE, results="hide",message=FALSE, error=FALSE, include=FALSE, autodep=TRUE}
 if(packageVersion("zinbwave")<"1.1.0") stop("must have current master version to avoid bugs")
-if(packageVersion("clusterExperiment")<"1.5.0-9007") stop("must have current devel version to avoid bugs")
+if(packageVersion("clusterExperiment")<"1.5.0-9009") stop("must have current devel version to avoid bugs")
 if(packageVersion("scone")<"1.2.0") stop("must have current master version to avoid bugs")
 
 library(BiocStyle)
@@ -319,10 +319,12 @@ plot(pca$x, col = col_clus[as.character(publishedClusters)], pch = 20, main = ""
 We are going to set these normalized values to be our first assay, so that they become the default in future plots.
 
 ```{r setNormAssay}
-assay(dataObj)<-assays(dataObj)$normalizedValues
+assays(dataObj)<-assays(dataObj)[c("normalizedValues","residuals","counts")]
 ```
 
-EP: This saves a lot of trouble with the plotHeatmap, etc. The code needs to be fixed so *reorders* the assays, rather than what I've done, which is just replace the first. I don't have the object in front of me to be able to do it (it might make sense for me to add option to different assays in clusterExperiment, but I'm not going to do that right now.)
+EP: This saves a lot of trouble with the plotHeatmap, etc. 
+
+EP: I've changed this code from my previous ad hoc to not delete the previous, but just reorder them. Again, (it might make sense for me to add option to different assays in clusterExperiment, but I'm not going to do that right now.)
 
 EP: Should probably address these normalized values, especially to more strongly make clear that shouldn't use these for clustering, just for visualization. The way its stated it sounds like dimensionality reduction is an "also", when in fact it is the main point and the normalized values are the afterthought. Might consider reordering the sections to more clearly demonstrate this and put dimensionality reduction first.  
 FP: Agree, let's keep it in mind for once the workflow runs smoothly.
@@ -352,31 +354,26 @@ Note that the defaults in `RSEC` are designed for input data that are the actual
 
 
 ```{r addW}
-SingleCellExperiment::reducedDim(dataObj,"zinbwave50")<-W
+#SingleCellExperiment::reducedDim(dataObj,"zinbwave50")<-W
 ```
 
-EP: If zinbwave already has been updated, this above code is probably not needed since its aready there.  
 FP: As the name/type "zinbwave50" is then needed in the RSEC function, we might need to keep this line.
-EP: I just called it "zinbwave50". We can replace that with whatever its name is in the results from zinbwave. It needs a name, but it can be anything. 
+EP: I just called it "zinbwave50" for convenience. I've changed future code to just use "zinbwave". Though as a suggestion, you might consider for the zinbwave function to add the value of K to the name automatically, since the dimensions are not nested within each other, like pca, so you might run multiple versions of zinbwave and want to compare different K. 
   
-EP: Note that we need to see whether clusterExperiment retains all of the different assays or not. It should in principle, but its not something I've tested. Also, I purposefully didn't give the parameter `nReducedDims` because I think it should automatically use the max saved in object if not designated. If not, let me know. 
+EP: Note that we need to see whether clusterExperiment retains all of the different assays or not. It should in principle, but its not something I've tested. Also, I purposefully didn't give the parameter `nReducedDims` in RSEC because I think it should automatically use the max saved in object if not designated. If we're not getting the same results, we can add in `nReducedDims=50` and see; if that changes anything, let me know. However, I would focus on the question of different W values. 
 
-EP: Currently isCount=FALSE. Does that make sense for the normalized values, or should we set it to TRUE (it shouldn't affect the clustering, since the clustering is only on the reducedDim slot now, but could affect downstream plots, etc.).  
-FP: yes, I think isCount=FALSE makes sense for the normalized values.
-
-EP: We could add back in the mergeClusters step now that we don't have the W in the data slot. I haven't done that yet because we want to just recreate the previous, but it would be reasonable now. It would be based on doing DE of the normalized values, however, because I put them into the main assay slot, so we might need to think about this multiple assay question more seriously. But then again, I don't know the workflow for the DE part, so maybe we want to leave it out.  But it would be nice to show that you can do that for this setting. Once this workflow is running I can come back to it.  
 FP: I am not sure it makes sense to perform the DE on the normalized values. Intuitively, I would say no, but not sure. We can still show that it is a possibility and write in the text that in this case, it might not make sense. We are working on a DE method for scRNA-seq where we use observational weights computed from the posterior probabilities of the ZINB-WaVE model in bulk RNA tools like edgeR and DESeq2. I think, eventually, it would be nice to be able to use that. Maybe, not for the next next version of the workflow.  
-
+EP: I'd note that we use the normalized values for finding those DE with respsect to lineage. But I don't think its necessary to put it in here, but maybe in future directions, where you discuss that functionality, we could mention that it would allow the usage of mergeClusters. Also would be a good time to point out that DE on normalized values probably not a great idea either, if you don't think so. I also think the reason for skipping mergeClusters should be stated in the above text, rather than just saying we are skipping it.
 
 ```{r rsec_50,eval=FALSE}
 print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
-                                betas = 0.8, reduceMethod="zinbwave50",
+                                betas = 0.8, reduceMethod="zinbwave",
                                 clusterFunction = "hierarchical01", minSizes=1,
                                 ncores = NCORES, isCount=FALSE,
-                                dendroReduce="zinbwave50",
+                                dendroReduce="zinbwave",
                                 subsampleArgs = list(resamp.num=100,
-                                                     clusterFunction="kmeans",
-                                                     clusterArgs=list(nstart=10)),
+                                           clusterFunction="kmeans",
+                                          clusterArgs=list(nstart=10)),
                                 verbose=TRUE,
                                 combineProportion = 0.7,
                                 mergeMethod = "none", random.seed=424242,
@@ -394,8 +391,6 @@ The resulting candidate clusterings can be visualized using the `plotClusters` f
 plotClusters(dataObj)
 ```
 
-EP: I've updated so that the default has >500 colors, so don't need the colPalette command, I hope.
-
 The `plotCoClustering` function produces a heatmap of the co-clustering matrix, which records, for each pair of cells, the proportion of times they were clustered together across the candidate clusters (Figure \@ref(fig:plotcoclust)). 
 
 ```{r plotcoclust, fig.cap="RSEC: Heatmap of co-clustering matrix."}
@@ -403,6 +398,7 @@ plotCoClustering(dataObj)
 ```
 
 FP: Ordering does not seem right.  
+EP: I get a very different plotCoClustering plot than what you sent me. See email.
 
 The distribution of cells across the consensus clusters can be visualized in Figure \@ref(fig:barplotOurs) and is as follows:
 
@@ -419,7 +415,7 @@ plotBarplot(dataObj, legend = FALSE)
 The distribution of cells in our workflow's clustering overall agrees with that in the original published clustering (Figure \@ref(fig:addPublishedClusters)), the main difference being that several of the published clusters were merged here into single clusters. This discrepancy is likely caused by the fact that we started with the top 1,000 genes, which might not be enough to discriminate between closely related clusters.
 
 ```{r addPublishedClusters, fig.cap="RSEC: Barplot of number of cells per cluster, for our workflow's RSEC clustering, color-coded by original published clustering."}
-dataObj <- addClusters(dataObj, colData(dataObj)$publishedClusters, 
+dataObj <- addClusterings(dataObj, colData(dataObj)$publishedClusters, 
                      clusterLabel = "publishedClusters")
 
 ## change default color to match with Figure 7
@@ -427,10 +423,11 @@ clusterLegend(dataObj)$publishedClusters[, "color"] <-
   col_clus[clusterLegend(dataObj)$publishedClusters[, "name"]]
 
 plotBarplot(dataObj, whichClusters=c("combineMany","publishedClusters"),
-            xlab = "", legend = FALSE)
+            xlab = "", legend = FALSE,missingColor="white")
 ```
  
 FP: compared to the previous version, it seems that there is a lot of black. Would the black coming from the contour of the rectangles in the bars?
+EP: I'm not sure what you mean about a lot of black on the barplot. Do you mean the unassigned samples? The colors have changed because the default set of colors was updated. 
 
 Figure \@ref(fig:heatmapsClusters) displays a heatmap of the normalized expression measures for the 1,000 most variable genes, where cells are clustered according to the RSEC consensus.
 
@@ -442,13 +439,11 @@ metaColors <- list("Experiment" = experimentColors,
                    "Batch" = batchColors)
 
 plotHeatmap(dataObj, 
-            whichClusters = c("primary","PublishedClusters"), clusterFeaturesData = "all",
+            whichClusters = c("combineMany","publishedClusters"), clusterFeaturesData = "all",
             clusterSamplesData = "dendrogramValue", breaks = 0.99,
             sampleData = c("Batch", "Experiment"),
             clusterLegend = metaColors, annLegend = FALSE, main = "")
 ```
-
-EP: publishedClusters is saved as a cluster, so don't need to set it up. Now normalized should be default assay, so not need 'visualizeData'.  
 
 FP: publishedClusters does not appear in the bars.
 EP: I forgot to add it to the `whichClusters` argument. 
@@ -456,12 +451,21 @@ EP: I forgot to add it to the `whichClusters` argument.
 Finally, we can visualize the cells in a two-dimensional space using the MDS of the low-dimensional matrix `W` and coloring the cells according to their newly-found RSEC clusters (Figure \@ref(fig:mdsWce)); this is anologous to Figure \@ref(fig:mdsW) for the original published clusters.
 
 ```{r mdsWce, fig.cap="RSEC: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by RSEC clustering."}
-plotDimReduce(dataObj,whichCluster="primary",reducedDim="zinbwave50",pch=20,
-	xlab = "Component1", ylab = "Component2",legendTitle="Sample",main=""
+plotReducedDims(dataObj,whichCluster="primary",reducedDim="zinbwave",pch=20,
+	xlab = "Component1", ylab = "Component2",legendTitle="Sample",main="",
+	plotUnassigned=FALSE
 )
+
+# ###test
+# col<-convertClusterLegend(dataObj,whichCluster="primary",output="matrixColors")[,1]
+# col[col=="white"]<-"grey"
+# W<-reducedDim(dataObj,"zinbwave")
+# plot(-W[,1:2],col=col,pch=20)
 ```
+
 FP: I get `"reduceMethod" is not a graphical parameter`. I think this plot is different from the previous version.
-EP: I had wrong name for argument (should have been `reducedDim`), so it went with default which is PCA on the assay(dataObj) slot -- i.e. not using zinbwave. Hopefully better now.
+
+EP: I had wrong name for argument which has changed (should have been `reducedDim`), so it went with default which is PCA on the assay(dataObj) slot -- i.e. not using zinbwave. Now it gives the same plot as my test, where I directly plotted the results of `reducedDim(dataObj,"zinbwave")`. However, its still not exactly the same as previous rendition online. First it looks like the dimensions got flipped, i.e. multiplied by -1. Furthermore, it doesn't look exactly the same (e.g. outlying points not the same), even if I color in the unassigned so we can see them. Is zinbwave giving back the exact same W as before? I've checked that the W in the `dataObj_afterZinbwave` and W I plotted above from `dataObj_afterRSEC` are the same so its not clusterExperiment messing something up. If so, this could be why we are getting slightly different clustering results. 
 
 
 ## Cell lineage and pseudotime inference: Slingshot
@@ -490,27 +494,26 @@ Cells in cluster `c4` have a cluster label of `-2` in the original published clu
 
 
 ```{r boxplotReg3g, fig.width=6, fig.height=4, fig.cap="RSEC: Boxplots of the log count of gene Reg3g stratified by cluster."}
-# c4 <- rep("other clusters", ncol(se))
-# c4[primaryClusterNamed(dataObj) == "c4"] <- "cluster c4"
-# boxplot(log1p(assay(se)["Reg3g", ]) ~ primaryClusterNamed(dataObj),
-#         ylab = "Reg3g log counts", cex.axis = .8, cex.lab = .8)
-plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g",ylab = "Reg3g log counts", cex.axis = .8, cex.lab = .8)
+plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g",ylab = "Reg3g count values", cex.axis = .8, cex.lab = .8,assay=log1p(assays(dataObj)[["counts"]]))
+# plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g",ylab = "Reg3g normalized Expression values", cex.axis = .8, cex.lab = .8)
+
 ```
 
 FP: this plot is fairly different from the previous version. We should see for one cluster that the gene expression for Reg3g is much high that for the other clusters.  
-EP: I think this plot is of the normalized values (saved in assay(dataObj)). But I see that the previous plot was on the counts. Is that better than normalized value?
+
+EP: I think this plot showed the normalized values (saved in assay(dataObj)). But I see that the previous plot was on the counts. Is that better than normalized value? I have added (just to this plot for now), an option to plot a specific given matrix (or a character value defining an assay, but since we want log-transform of the counts, which is not saved in the main assay, putting in "counts" doesn't give plot we want). But it's now cluster c1, not c4 that has this property. It might be useful to take the clustering from the old RSEC data object and directly compare the clusterings. Regardless, none of the previous commands are going to get the right results going forward since the clusters don't have the same name. See note on plotReducedDims command where I think the input `W` has changed.
 
 To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the Slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of Slingshot, where we only provide the identity of the start cluster but not of the end clusters.
 
 ```{r}
-pseudoCe <- dataObj[,!primaryClusterNamed(dataObj) %in% c("-1", "c4")]
-X <- reducedDim(pseudoCe,type="zinbwave50")
+pseudoCe <- dataObj[,!primaryClusterNamed(dataObj) %in% c("-1", "c1")]
+X <- reducedDim(pseudoCe,type="zinbwave")
 mds <- cmdscale(dist(X), eig = TRUE, k = 4)
 X <- mds$points
 lineages <- getLineages(X, clusterLabels = primaryClusterNamed(pseudoCe), start.clus = "c1")
 ```
+EP: See my email. I don't get this subsetting error on my machine or on TravisCI. I do get on SCF Servers which are running R3.4.1 and the older version of bioconductor. Can you check this on your machine?
 
-EP: created a pseudoCe to subset to the samples for the lineage. Simplifies code enormously and as long as we don't change it, doesn't use additional memory, I think.  
 FP: I agree. I get an error though when I run line 501:
 `Error in .BasicFunsList[[f]] : no such index at level 1`.
 
@@ -519,11 +522,9 @@ FP: I stooped here.
 Before fitting the simultaneous principal curves, we examine the global structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
 ```{r tree, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space, with connecting lines between cluster centers representing the inferred global lineage structure."}
-colorCl<-convertClusterLegend(pseudoCe,whichCluster="primary",output="matrixColors")
+colorCl<-convertClusterLegend(pseudoCe,whichCluster="primary",output="matrixColors")[,1]
 pairs(lineages, type="lineages", col = colorCl)
 ```
-
-EP: convertClusterLegend does the transformation into vector of colors. However, output may be matrix, in which case need to add a `[,1]` to the above code.
 
 Having found the global lineage structure, we now construct a set of smooth, branching curves in order to infer the pseudotime variables. Simultaneous principal curves are constructed from the individual cells along each lineage, rather than the cell clusters. This makes them more stable and better suited for assigning cells to lineages. The final curves are shown in Figure \@ref(fig:curves).
 
@@ -575,15 +576,17 @@ orderSamples(pseudoCe)<-order(t,na.last=TRUE)
 plotHeatmap(pseudoCe[topgenes,!is.na(t)], clusterSamplesData = "orderSamplesValue", breaks = .99)
 ```
 
-EP: note the above with do heirarchcial clustering of the top genes. If want them to stay in order given, should give `clusterFeaturesData=topgenes` (I think that is the argument)
+EP: note the above does heirarchcial clustering of the top genes. If want them to stay in order given, should give `clusterFeaturesData=topgenes` (I think that is the argument)
 
-The above code should take care of the ordering and NA values. Note that subseting a ClusterExperiment object is suppose to also subset the orderSamples value correctly. Let me know if that is not the case. 
+EP: The above code should take care of the ordering and NA values. Note that subseting a ClusterExperiment object is suppose to also subset the orderSamples value correctly. Let me know if that is not the case. 
 
 ## Further developments
 
 In an effort to improve scRNA-seq data analysis workflows, we are currently exploring a variety of applications and extensions of our ZINB-WaVE model. In particular, we are developing a method to impute counts for dropouts; the imputed counts could be used in subsequent steps of the workflow, including dimensionality reduction, clustering, and cell lineage inference. In addition, we are extending ZINB-WaVE to identify differentially expressed genes, both in terms of the negative binomial mean and the zero inflation probability, reflecting, respectively, gradual DE and on/off DE patterns. We are also developing a method to identify genes that are DE either within or between lineages inferred from Slingshot. 
 
 Finally, a new S4 class called `SingleCellExperiment` is currently under development (https://github.com/drisso/SingleCellExperiment). This new class is essentially a `SummarizedExperiment` class with a couple of additional slots, the most important of which is `reducedDims`, which, much like the `assays` slot of `SummarizedExperiment`, can contain one or more matrices of reduced dimension. This new `SingleCellExperiment` class would be a valuable addition to the workflow, as we could store in a single object the raw counts as well as the low-dimensional matrix created by the ZINB-WaVE dimensionality reduction step. Once the implementation of this class is stable, we would like to incorporate it to the workflow.
+
+EP:  Obviously should replace this text. Might want to mention ability of class to store data matrices not in memory, though not currently implemented, which is the next major change we need to do here. 
 
 # Conclusion
 
