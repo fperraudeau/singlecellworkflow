@@ -217,17 +217,18 @@ Finally, for computational efficiency, we retain only the 1,000 most variable ge
 
 
 ```{r}
-# Filtering to top 1,000 most variable genes
-vars <- rowVars(log1p(assay(dataObj)))
-names(vars) <- rownames(dataObj)
-vars <- sort(vars, decreasing = TRUE)
-dataObj <- dataObj[names(vars)[1:1000],]
+# # Filtering to top 1,000 most variable genes
+# vars <- rowVars(log1p(assay(dataObj)))
+# names(vars) <- rownames(dataObj)
+# vars <- sort(vars, decreasing = TRUE)
+# dataObj <- dataObj[names(vars)[1:1000],]
+
+#alternative script:
+dataObj<-makeFilterStats(dataObj,filterStats="var")
+dataObj<-filterData(dataObj,percentile=1000)
 ```
 
-EP: If use SingleCellFilter (or davide adds to singleCellExperiment) could do this in 1 line.
-
-EP: Why do we create 'core' rather than just replace 'dataObj'.   
-FP: I agree, I think that it is unnecessary. I changed 'core' to dataObj.
+EP: Added existing code in the clusterExperiment package that does this. Also will mean that any future steps in package that need variance for the dataObj will have variance per gene stored.
 
 ## Dataset structure
 
@@ -332,6 +333,8 @@ The `zinbwave` function can also be used to perform dimensionality reduction, wh
 
 FP: W can now be accessed using reducedDim function. Two functions called reducedDim are loaded in the workflow: one from slingshot and the other one from singleCellExperiment.
 
+EP: I would get rid of the `SingleCellExperiment::` code and just add a `library(SingleCellExperiment)`. Much more comfortable code for most users.
+
 ```{r mdsW, fig.cap="ZINB-WaVE: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by original published clustering."}
 W <- SingleCellExperiment::reducedDim(dataObj)
 d <- dist(W)
@@ -354,6 +357,7 @@ SingleCellExperiment::reducedDim(dataObj,"zinbwave50")<-W
 
 EP: If zinbwave already has been updated, this above code is probably not needed since its aready there.  
 FP: As the name/type "zinbwave50" is then needed in the RSEC function, we might need to keep this line.
+EP: I just called it "zinbwave50". We can replace that with whatever its name is in the results from zinbwave. It needs a name, but it can be anything. 
   
 EP: Note that we need to see whether clusterExperiment retains all of the different assays or not. It should in principle, but its not something I've tested. Also, I purposefully didn't give the parameter `nReducedDims` because I think it should automatically use the max saved in object if not designated. If not, let me know. 
 
@@ -438,7 +442,7 @@ metaColors <- list("Experiment" = experimentColors,
                    "Batch" = batchColors)
 
 plotHeatmap(dataObj, 
-            whichClusters = "primary", clusterFeaturesData = "all",
+            whichClusters = c("primary","PublishedClusters"), clusterFeaturesData = "all",
             clusterSamplesData = "dendrogramValue", breaks = 0.99,
             sampleData = c("Batch", "Experiment"),
             clusterLegend = metaColors, annLegend = FALSE, main = "")
@@ -447,15 +451,17 @@ plotHeatmap(dataObj,
 EP: publishedClusters is saved as a cluster, so don't need to set it up. Now normalized should be default assay, so not need 'visualizeData'.  
 
 FP: publishedClusters does not appear in the bars.
+EP: I forgot to add it to the `whichClusters` argument. 
 
 Finally, we can visualize the cells in a two-dimensional space using the MDS of the low-dimensional matrix `W` and coloring the cells according to their newly-found RSEC clusters (Figure \@ref(fig:mdsWce)); this is anologous to Figure \@ref(fig:mdsW) for the original published clusters.
 
 ```{r mdsWce, fig.cap="RSEC: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by RSEC clustering."}
-plotDimReduce(dataObj,whichCluster="primary",reduceMethod="zinbwave50",pch=20,
+plotDimReduce(dataObj,whichCluster="primary",reducedDim="zinbwave50",pch=20,
 	xlab = "Component1", ylab = "Component2",legendTitle="Sample",main=""
 )
 ```
 FP: I get `"reduceMethod" is not a graphical parameter`. I think this plot is different from the previous version.
+EP: I had wrong name for argument (should have been `reducedDim`), so it went with default which is PCA on the assay(dataObj) slot -- i.e. not using zinbwave. Hopefully better now.
 
 
 ## Cell lineage and pseudotime inference: Slingshot
@@ -492,8 +498,7 @@ plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g",ylab = "Reg3
 ```
 
 FP: this plot is fairly different from the previous version. We should see for one cluster that the gene expression for Reg3g is much high that for the other clusters.  
-
-EP: not sure why needed 'c4' object. This is new function. Tell me if you run into problems. 
+EP: I think this plot is of the normalized values (saved in assay(dataObj)). But I see that the previous plot was on the counts. Is that better than normalized value?
 
 To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the Slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of Slingshot, where we only provide the identity of the start cluster but not of the end clusters.
 
