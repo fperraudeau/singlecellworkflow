@@ -49,6 +49,8 @@ knitr::include_graphics("schema_workflow.png")
 ```
 
 EP: I have only updated the code, not the text. The text needs adaptation, especially future directions and references to `SummarizedExperiment` which should be `SingleCellExperiment`.
+FP: TODO, fix ref.  
+
 
 # Analysis of olfactory stem cell differentiation using scRNA-seq data
 
@@ -69,14 +71,15 @@ It was found that the first major bifurcation in the HBC lineage trajectory occu
 The following packages are needed.
 
 ```{r packages}
+# GitHub
+library(slingshot)
+
 # Bioconductor
 library(BiocParallel)
 library(clusterExperiment)
 library(scone)
 library(zinbwave)
-
-# GitHub
-library(slingshot)
+library(SingleCellExperiment)
 
 # CRAN
 library(doParallel)
@@ -148,6 +151,7 @@ dim(E)
 We remove the ERCC spike-in sequences and the CreER gene, as the latter corresponds to the estrogen receptor fused to Cre recombinase (Cre-ER), which is used to activate HBCs into differentiation following injection of tamoxifen (see [@Fletcher2017] for details).
 
 EP: There's code in SingleCellExperiment for spike-ins. We should use it, though I'm not familiar with it. 
+FP: Davide, what is the standard way to use SingleCellExperiment for spike-ins?  
 
 ```{r}
 # Remove ERCC and CreER genes
@@ -186,9 +190,6 @@ dataObj <- SummarizedExperiment(assays = list(counts = E),
 dataObj
 ```
 
-EP: changing 'se' to 'dataObj' because it changes classes. Also can search and replace 'dataObj' and not 'se'.  
-FP: good idea.
-
 Using the Bioconductor R package `scone`, we remove low-quality cells according to the quality control filter implemented in the function `metric_sample_filter` and based on the following criteria (Figure \@ref(fig:scone)): (1) Filter out samples with low total number of reads or low alignment percentage and (2) filter out samples with a low detection rate for housekeeping genes. See the [scone vignette](https://www.bioconductor.org/packages/release/bioc/vignettes/scone/inst/doc/sconeTutorial.html) for details on the filtering procedure.
 
 ```{r scone, fig.cap="SCONE: Filtering of low-quality cells."}
@@ -218,17 +219,23 @@ Finally, for computational efficiency, we retain only the 1,000 most variable ge
 
 ```{r}
 # # Filtering to top 1,000 most variable genes
-# vars <- rowVars(log1p(assay(dataObj)))
-# names(vars) <- rownames(dataObj)
-# vars <- sort(vars, decreasing = TRUE)
+vars <- rowVars(log1p(assay(dataObj)))
+names(vars) <- rownames(dataObj)
+vars <- sort(vars, decreasing = TRUE)
 # dataObj <- dataObj[names(vars)[1:1000],]
 
 #alternative script:
 dataObj<-makeFilterStats(dataObj,filterStats="var")
-dataObj<-filterData(dataObj,percentile=1000)
+dataObj<-filterData(dataObj,percentile=1000,filterStats="var")
+
+length(intersect(rownames(dataObj), names(vars)[1:1000]))
+setdiff(rownames(dataObj), names(vars)[1:1000])
 ```
 
-EP: Added existing code in the clusterExperiment package that does this. Also will mean that any future steps in package that need variance for the dataObj will have variance per gene stored.
+EP: Added existing code in the clusterExperiment package that does this. Also will mean that any future steps in package that need variance for the dataObj will have variance per gene stored.  
+FP: great. I added the filterStats argument to filterData function. I get an error otherwise. 
+
+FP: We get a different list of most variable genes here.  
 
 ## Dataset structure
 
@@ -297,6 +304,9 @@ norm <- assays(dataObj)$normalizedValues
 norm[1:3,1:3]
 ```
 
+FP: These values are slightly different from what 
+
+
 As expected, the normalized values no longer exhibit batch effects (Figure \@ref(fig:boxplotNorm)).
 
 ```{r boxplotNorm, fig.cap="ZINB-WaVE: Boxplots of normalized expression measures (deviance residuals), color-coded by batch."}
@@ -322,7 +332,8 @@ We are going to set these normalized values to be our first assay, so that they 
 assays(dataObj)<-assays(dataObj)[c("normalizedValues","residuals","counts")]
 ```
 
-EP: This saves a lot of trouble with the plotHeatmap, etc. 
+EP: This saves a lot of trouble with the plotHeatmap, etc.
+FP: Ok.
 
 EP: I've changed this code from my previous ad hoc to not delete the previous, but just reorder them. Again, (it might make sense for me to add option to different assays in clusterExperiment, but I'm not going to do that right now.)
 
@@ -333,12 +344,8 @@ FP: Agree, let's keep it in mind for once the workflow runs smoothly.
 
 The `zinbwave` function can also be used to perform dimensionality reduction, where, in this workflow, the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results in a scatterplot with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).  
 
-FP: W can now be accessed using reducedDim function. Two functions called reducedDim are loaded in the workflow: one from slingshot and the other one from singleCellExperiment.
-
-EP: I would get rid of the `SingleCellExperiment::` code and just add a `library(SingleCellExperiment)`. Much more comfortable code for most users.
-
 ```{r mdsW, fig.cap="ZINB-WaVE: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by original published clustering."}
-W <- SingleCellExperiment::reducedDim(dataObj)
+W <- reducedDim(dataObj)
 d <- dist(W)
 fit <- cmdscale(d, eig = TRUE, k = 2)
 plot(fit$points, col = col_clus[as.character(publishedClusters)], main = "",
@@ -354,13 +361,13 @@ Note that the defaults in `RSEC` are designed for input data that are the actual
 
 
 ```{r addW}
-#SingleCellExperiment::reducedDim(dataObj,"zinbwave50")<-W
+#reducedDim(dataObj,"zinbwave50")<-W
 ```
 
 FP: As the name/type "zinbwave50" is then needed in the RSEC function, we might need to keep this line.
 EP: I just called it "zinbwave50" for convenience. I've changed future code to just use "zinbwave". Though as a suggestion, you might consider for the zinbwave function to add the value of K to the name automatically, since the dimensions are not nested within each other, like pca, so you might run multiple versions of zinbwave and want to compare different K. 
   
-EP: Note that we need to see whether clusterExperiment retains all of the different assays or not. It should in principle, but its not something I've tested. Also, I purposefully didn't give the parameter `nReducedDims` in RSEC because I think it should automatically use the max saved in object if not designated. If we're not getting the same results, we can add in `nReducedDims=50` and see; if that changes anything, let me know. However, I would focus on the question of different W values. 
+EP: Note that we need to see whether clusterExperiment retains all of the different assays or not. It should in principle, but its not something I've tested. Also, I purposefully didn't give the parameter `nReducedDims` in RSEC because I think it should automatically use the max saved in object if not designated. If we're not getting the same results, we can add in `nReducedDims=50` and see; if that changes anything, let me know. However, I would focus on the question of different W values.  
 
 FP: I am not sure it makes sense to perform the DE on the normalized values. Intuitively, I would say no, but not sure. We can still show that it is a possibility and write in the text that in this case, it might not make sense. We are working on a DE method for scRNA-seq where we use observational weights computed from the posterior probabilities of the ZINB-WaVE model in bulk RNA tools like edgeR and DESeq2. I think, eventually, it would be nice to be able to use that. Maybe, not for the next next version of the workflow.  
 EP: I'd note that we use the normalized values for finding those DE with respsect to lineage. But I don't think its necessary to put it in here, but maybe in future directions, where you discuss that functionality, we could mention that it would allow the usage of mergeClusters. Also would be a good time to point out that DE on normalized values probably not a great idea either, if you don't think so. I also think the reason for skipping mergeClusters should be stated in the above text, rather than just saying we are skipping it.
@@ -390,6 +397,8 @@ The resulting candidate clusterings can be visualized using the `plotClusters` f
 ```{r examineCombineMany, fig.cap="RSEC: Candidate clusterings found using the function RSEC from the clusterExperiment package."}
 plotClusters(dataObj)
 ```
+
+FP: We get more clusters for the combineMany method than before. Maybe because the most variable genes are different?
 
 The `plotCoClustering` function produces a heatmap of the co-clustering matrix, which records, for each pair of cells, the proportion of times they were clustered together across the candidate clusters (Figure \@ref(fig:plotcoclust)). 
 
@@ -495,8 +504,6 @@ Cells in cluster `c4` have a cluster label of `-2` in the original published clu
 
 ```{r boxplotReg3g, fig.width=6, fig.height=4, fig.cap="RSEC: Boxplots of the log count of gene Reg3g stratified by cluster."}
 plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g",ylab = "Reg3g count values", cex.axis = .8, cex.lab = .8,assay=log1p(assays(dataObj)[["counts"]]))
-# plotFeatureBoxplot(dataObj, whichCluster="primary", feature="Reg3g",ylab = "Reg3g normalized Expression values", cex.axis = .8, cex.lab = .8)
-
 ```
 
 FP: this plot is fairly different from the previous version. We should see for one cluster that the gene expression for Reg3g is much high that for the other clusters.  
@@ -543,7 +550,7 @@ In the workflow, we recover a reasonable ordering of the clusters using the unsu
 ```{r slingshotsupervised, eval=FALSE}
 lineages <- getLineages(X, clusterLabels = primaryClusterNamed(pseudoCe), start.clus = "c1",
                          end.clus = c("c3", "c7"))
-lineagees <- getCurves(lineages)
+lineages <- getCurves(lineages)
 pairs(lineages, type="curves", col = colorCl)
 pairs(lineages, type="lineages", col = colorCl, 
       show.constraints = TRUE)
