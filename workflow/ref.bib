@@ -39,10 +39,12 @@ url = {https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601}
 }
 @article{Street2017,
 author = {Street, Kelly and Risso, Davide and Fletcher, Russell B and Das, Diya and Ngai, John and Yosef, Nir and Purdom, Elizabeth and Dudoit, Sandrine},
-doi = {10.1101/128843},
-journal = {bioRxiv},
+journal = {BMC Genomics},
 title = {{Slingshot: Cell lineage and pseudotime inference for single-cell transcriptomics}},
-year = {2017}
+volume = {19},
+number = {1},
+pages = {477},
+year = {2018},
 }
 @article{Huber2015,
 author = {Huber, Wolfgang and Carey, Vincent J and Gentleman, Robert and Anders, Simon and Carlson, Marc and Carvalho, Benilton S and Bravo, Hector Corrada and Davis, Sean and Gatto, Laurent and Girke, Thomas and Gottardo, Raphael and Hahne, Florian and Hansen, Kasper D and Irizarry, Rafael A and Lawrence, Michael and Love, Michael I and MacDonald, James and Obenchain, Valerie and Ole{\'{s}}, Andrzej K and Pag{\`{e}}s, Herv{\'{e}} and Reyes, Alejandro and Shannon, Paul and Smyth, Gordon K and Tenenbaum, Dan and Waldron, Levi and Morgan, Martin},
@@ -58,12 +60,13 @@ volume = {12},
 year = {2015}
 }
 @article{Risso2017,
-abstract = {Single-cell RNA sequencing (scRNA-seq) is a powerful technique that enables researchers to measure gene expression at the resolution of single cells. Because of the low amount of RNA present in a single cell, many genes fail to be detected even though they are expressed; these genes are usually referred to as dropouts. Here, we present a general and flexible zero-inflated negative binomial model (ZINB-WaVE), which leads to low-dimensional representations of the data that account for zero inflation (dropouts), over-dispersion, and the count nature of the data. We demonstrate, with simulations and real data, that the model and its associated estimation procedure are able to give a more stable and accurate low-dimensional representation of the data than principal component analysis (PCA) and zero-inflated factor analysis (ZIFA), without the need for a preliminary normalization step.},
-author = {Risso, Davide and Perraudeau, Fanny and Gribkova, Svetlana and Dudoit, Sandrine and Vert, Jean-Philippe},
-doi = {10.1101/125112},
-title = {{ZINB-WaVE: A general and flexible method for signal extraction from single-cell RNA-seq data}},
-url = {http://biorxiv.org/content/biorxiv/early/2017/04/06/125112.full.pdf},
-year = {2017}
+  title={A general and flexible method for signal extraction from single-cell RNA-seq data},
+  author={Risso, Davide and Perraudeau, Fanny and Gribkova, Svetlana and Dudoit, Sandrine and Vert, Jean-Philippe},
+  journal={Nature Communications},
+  volume={9},
+  number={1},
+  pages={284},
+  year={2018},
 }
 @article{Peer2017,
 abstract = {Single-cell RNA-sequencing is fast becoming a major technology that is revolutionizing biological discovery in fields such as development, immunology and cancer. The ability to simultaneously measure thousands of genes at single cell resolution allows, among other prospects, for the possibility of learning gene regulatory networks at large scales. However, scRNA-seq technologies suffer from many sources of significant technical noise, the most prominent of which is 'dropout' due to inefficient mRNA capture. This results in data that has a high degree of sparsity, with typically only {\~{}}10{\%} non-zero values. To address this, we developed MAGIC (Markov Affinity-based Graph Imputation of Cells), a method for imputing missing values, and restoring the structure of the data. After MAGIC, we find that two-and three-dimensional gene interactions are restored and that MAGIC is able to impute complex and non-linear shapes of interactions. MAGIC also retains cluster structure, enhances cluster-specific gene interactions and restores trajectories, as demonstrated in mouse retinal bipolar cells, hematopoiesis, and our newly generated epithelial-to-mesenchymal transition dataset.},
@@ -99,4 +102,12 @@ title = {{Deconstructing Olfactory Stem Cell Trajectories at Single-Cell Resolut
 url = {http://dx.doi.org/10.1016/j.stem.2017.04.003},
 volume = {20},
 year = {2017}
+}
+@article{Risso2018,
+  title={{clusterExperiment and RSEC}: A {Bioconductor} package and framework for clustering of single-cell and other large gene expression datasets},
+  author={Risso, Davide and Purvis, Liam and Fletcher, Russell and Das, Diya and Ngai, John and Dudoit, Sandrine and Purdom, Elizabeth},
+  journal={bioRxiv},
+  pages={280545},
+  year={2018},
+  publisher={Cold Spring Harbor Laboratory}
 }
