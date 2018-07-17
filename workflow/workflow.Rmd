@@ -331,7 +331,7 @@ plot(pca$x, col = col_clus[as.character(publishedClusters)], pch = 20, main = ""
 We are going to set these normalized values to be our first assay, so that they become the default in future plots.
 
 ```{r setNormAssay}
-assays(dataObj)<-assays(dataObj)[c("normalizedValues","residuals","counts")]
+assays(dataObj)<-assays(dataObj)[c("normalizedValues","residuals","counts","weights")]
 ```
 
 EP: This saves a lot of trouble with the plotHeatmap, etc.
@@ -465,7 +465,7 @@ metaColors <- list("Experiment" = experimentColors,
 plotHeatmap(dataObj, 
             whichClusters = c("makeConsensus","publishedClusters"), clusterFeaturesData = "all",
             clusterSamplesData = "dendrogramValue", breaks = 0.99,
-            sampleData = c("Batch", "Experiment"),
+            colData = c("Batch", "Experiment"),
             clusterLegend = metaColors, annLegend = FALSE, main = "")
 ```
 
