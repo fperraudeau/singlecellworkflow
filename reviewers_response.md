@@ -111,7 +111,7 @@ Figure 15 refers back to Figure 2 but does not use the same color scheme for the
 
 I think it would be easier to change the colors right after the table in which we compare to the published results and keep the color consistent for the rest of the workflow. Elizabeth, is there a wrapper function to change colors without manually changing the clusterLegend? 
 
-@Davide: Yes, there is a new function `recolorClusters` and `renameClusters` to change name or colors in a specific clustering. 
+@Davide: Yes, there is a new function `recolorClusters` and `renameClusters` to change name or colors in a specific clustering. Also there is the `plotClusterLegend` function that could be used here to create a legend.
 
 Can you briefly describe what a GAM is ahead of Figure 17?
 
