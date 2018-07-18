@@ -43,7 +43,7 @@ Correct. Let's look into keeping the ERCC spike-ins in the object.
 
 Slingshot is in Bioconductor now. Good point about the installation instructions being at the end. I think we can provide a short section on installation at the beginning.
 
-2c.Opaque code is presented in order to generate plots, e.g.
+2c. Opaque code is presented in order to generate plots, e.g.
 ```{r}
 palDF <- ceObj@clusterLegend[[1]]
 pal <- palDF[, "color"]
@@ -109,7 +109,9 @@ Yes, let's explain better the plot.
 
 Figure 15 refers back to Figure 2 but does not use the same color scheme for the known cell types, so the reader cannot verify if you've recovered the lineages from the publication. It would be good therefore to have a legend for these figures (Fig 15 and following) indicating which cell types the colors refer to (this information is in the unlabeled table above, but should be included as a legend here).
 
-I think it would be easier to change the colors right after the table in which we compare to the published results and keep the color consistent for the rest of the workflow. Elizabeth, is there a wrapper function to change colors without manually changing the clusterLegend?
+I think it would be easier to change the colors right after the table in which we compare to the published results and keep the color consistent for the rest of the workflow. Elizabeth, is there a wrapper function to change colors without manually changing the clusterLegend? 
+
+@Davide: Yes, there is a new function `recolorClusters` and `renameClusters` to change name or colors in a specific clustering. 
 
 Can you briefly describe what a GAM is ahead of Figure 17?
 
