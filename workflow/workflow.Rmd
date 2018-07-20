@@ -39,9 +39,14 @@ knitr::opts_chunk$set(fig.align="center", fig.width=5, fig.height=5)
 
 Single-cell RNA sequencing (scRNA-seq) is a powerful and promising class of high-throughput assays that enable researchers to measure genome-wide transcription levels at the resolution of single cells. To properly account for features specific to scRNA-seq, such as zero inflation and high levels of technical noise, several novel statistical methods have been developed to tackle questions that include normalization, dimensionality reduction, clustering, the inference of cell lineages and pseudotimes, and the identification of differentially expressed (DE) genes. While each individual method is useful on its own for addressing a specific question, there is an increasing need for workflows that integrate these tools to yield a seamless scRNA-seq data analysis pipeline. This is all the more true, with novel sequencing technologies that allow an increasing number of cells to be sequenced in each run. For example, the Chromium Single Cell 3' Solution was recently used to sequence and profile about 1.3 million cells from embryonic mouse brains. 
 
-scRNA-seq low-level analysis workflows have already been developed, with useful methods for quality control (QC), exploratory data analysis (EDA), pre-processing, normalization, and visualization. The workflow described in [@Lun2016] and the package `scater` [@McCarthy2017] are such examples based on open-source R software packages from the Bioconductor Project [@Huber2015]. In these workflows, single-cell expression data are organized in objects of the `SingleCellExperiment` class allowing integrated analysis. However, these workflows are mostly used to prepare the data for further downstream analysis and do not focus on steps such as cell clustering and lineage inference.
+scRNA-seq low-level analysis workflows have already been developed, with useful methods for quality control (QC), exploratory data analysis (EDA), pre-processing, normalization, and visualization. The workflow described in [@Lun2016] and the package `scater` [@McCarthy2017] are such examples based on open-source R software packages from the Bioconductor Project [@Huber2015]. In these workflows, single-cell expression data are organized in objects of the `SingleCellExperiment` class allowing integrated analysis [@SingleCellExperiment]. However, these workflows are mostly used to prepare the data for further downstream analysis and do not focus on steps such as cell clustering and lineage inference.
 
-Here, we propose an integrated workflow for dowstream analysis, with the following four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates, using the `zinbwave` Bioconductor package; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering, as implemented in the `clusterExperiment` Bioconductor package; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages, using the `slingshot` Bioconductor package; and (4) DE analysis along lineages. Throughout the workflow, we use a single `SingleCellExperiment` object to store the scRNA-seq data along with any gene or cell-level metadata available from the experiment. The use of the `SingleCellExperiment` class allows us to seamlessly transition between the steps of this workflow, as well as to integrate this workflow with the upstream QC and EDA steps provided in [@Lun2016].
+Here, we propose an integrated workflow for dowstream analysis, with the following four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates, using the `zinbwave` Bioconductor package; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering, as implemented in the `clusterExperiment` Bioconductor package; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages, using the `slingshot` Bioconductor package; and (4) DE analysis along lineages. 
+
+One of the cornerstones of Bioconductor is the use of common data structures, implemented as classes in the S4 object-oriented system of R [@huber2015orchestrating].
+Throughout the workflow, we use a single object of the `SingleCellExperiment` class to store the scRNA-seq data along with any gene or cell-level metadata available from the experiment. 
+The `SingleCellExperiment` class [@SingleCellExperiment] is an extension of the `SummarizedExperiment` class [@SummarizedExperiment] specifically designed for single-cell data (see Figure 2 of [@huber2015orchestrating] for an overview of `SummarizedExperiment`).
+The use of the `SingleCellExperiment` class allows us to seamlessly transition between the steps of this workflow, as well as to integrate this workflow with the upstream QC and EDA steps provided in [@Lun2016].
 
 ```{r schema, echo=FALSE, out.width="90%", fig.cap="Workflow for analyzing scRNA-seq datasets. On the right, main plots generated by the workflow."}
 knitr::include_graphics("schema_workflow.png")
@@ -59,11 +64,27 @@ This workflow is illustrated using data from a scRNA-seq study of stem cell diff
 
 The scRNA-seq dataset we use as a case study was generated to study the differentitation of HBC stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. The expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using a statistical analysis pipeline analogous to that in the present workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017; @Risso2017; @Risso2018; @Street2017].
 
-It was found that the first major bifurcation in the HBC lineage trajectory occurs prior to cell division, producing either mature sustentacular (mSUS) cells or GBCs. Then, the GBC lineage, in turn, branches off to give rise to mOSN, microvillous (MV) cells, and cells of the Bowman gland (Figure \@ref(fig:stemcelldiff)). In this workflow, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes x cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
+It was found that the first bifurcation produces two lineage trajectories: the first one (purple curve in Figure \@ref(fig:stemcelldiff)) generates mature sustentacular cells (mSUS) through a differentiation process characterized by the absence of cell cycle and division. The other lineage trajectory (blue and orange curves in Figure \@ref(fig:stemcelldiff)) generates proliferative GBCs, which are characterized by cell cycle and division. These, in turn, generate mature olfactory sensory neurons (mOSN; orange curve) and microvillous cells (MV; blue curve).
 
-## Package versions
+In this workflow, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes x cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
 
-The following packages are needed.
+## Package installation and versions
+
+The source code to reproduce the analysis in the workflow are available at https://github.com/fperraudeau/singlecellworkflow. The packages used in the workflow can be installed using the following in R:
+
+```{r, eval=FALSE}
+install.packages(c("doParallel", "gam", "RColorBrewer"))
+
+install.packages("BiocManager")
+
+BiocManager::install(c("scone", "zinbwave", "clusterExperiment", "slingshot",
+                       "BiocParallel"))
+```
+
+Note that in order to successfully run the workflow, we need the following versions
+of the Bioconductor packages `scone (>=1.5.0)`, `zinbwave (>=1.3.2)`, and `clusterExperiment (>=2.1.3)`. We recommend running Bioconductor 3.8 (currently the devel version; see https://www.bioconductor.org/developers/how-to/useDevel/).
+
+We are now ready to load the packages.
 
 ```{r packages}
 # Bioconductor
@@ -71,7 +92,6 @@ library(BiocParallel)
 library(clusterExperiment)
 library(scone)
 library(zinbwave)
-library(SingleCellExperiment)
 library(slingshot)
 
 # CRAN
@@ -81,9 +101,6 @@ library(RColorBrewer)
 
 set.seed(20)
 ```
-
-Note that in order to successfully run the workflow, we need the following versions
-of the Bioconductor packages `scone (>=1.5.0)`, `zinbwave (>=1.3.2)`, and `clusterExperiment (>=2.1.3)`. We recommend running Bioconductor 3.8 (currently the devel version; see https://www.bioconductor.org/developers/how-to/useDevel/).
 
 ## Parallel computing
 
@@ -114,7 +131,7 @@ data_dir <- "../data/"
 
 urls = c("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE95601&format=file&file=GSE95601%5FoeHBCdiff%5FCufflinks%5FeSet%2ERda%2Egz",
          "https://raw.githubusercontent.com/rufletch/p63-HBC-diff/master/ref/oeHBCdiff_clusterLabels.txt")
-         
+
 if(!file.exists(paste0(data_dir, "GSE95601_oeHBCdiff_Cufflinks_eSet.Rda"))) {
   download.file(urls[1], paste0(data_dir, "GSE95601_oeHBCdiff_Cufflinks_eSet.Rda.gz"))
   R.utils::gunzip(paste0(data_dir, "GSE95601_oeHBCdiff_Cufflinks_eSet.Rda.gz"))
@@ -174,7 +191,7 @@ metadata <- data.frame("Experiment" = bio,
 metadata$publishedClusters[is.na(metadata$publishedClusters)] <- -2
 ```
 
-Throughout the workflow, we store the data in an object of class `SingleCellExperiment`. The `SingleCellExperiment` class [@SingleCellExperiment] is an extension of the `SummarizedExperiment` class [@SummarizedExperiment] specifically designed for single-cell data. In addition to keeping the expression values and their associated metadata within a single object, `SingleCellExperiment` allows the user to store normalization factors and the results of dimensionality reduction methods (such as `zinbwave`) within the object. Throughout the workflow, we will highlight when this special features of `SingleCellExperiment` are used.
+As discussed abouve, we store the data in an object of the class `SingleCellExperiment`. In addition to keeping the expression values and their associated metadata within a single object, `SingleCellExperiment` allows the user to store normalization factors and the results of dimensionality reduction methods (such as `zinbwave`) within the object. Throughout the workflow, we will highlight when this special features of `SingleCellExperiment` are used.
 
 ```{r}
 dataObj <- SingleCellExperiment(assays = list(counts = E),
@@ -206,15 +223,45 @@ dim(dataObj)
 
 After sample filtering, we are left with `r ncol(dataObj)` good quality cells.
 
-Finally, for computational efficiency, we retain only the 1,000 most variable genes. This seems to be a reasonable choice for the illustrative purpose of this workflow, as we are able to recover the biological signal found in the published analysis ([@Fletcher2017]). In general, however, we recommend care in selecting a gene filtering scheme, as an appropriate choice is dataset-dependent. 
+## Identification of most variable genes
+
+Often in unsupervised analyses of expression data, it is useful to focus on the most variable genes. These genes are the ones that vary the most across cells and are likely to be the most informative. Filtering out low-variance genes allows us to reduce the complexity of the problem, while retaining the most information in the dataset.
+
+Here, for computational efficiency, we retain only the 1,000 most variable genes, using a simple `log(x+1)` transformation. This seems to be a reasonable choice for the illustrative purpose of this workflow, as we are able to recover the biological signal found in the published analysis ([@Fletcher2017]). In general, however, we recommend care in selecting a gene filtering scheme, as an appropriate choice is dataset-dependent and many different strategies have been proposed in the literature. 
 
 To compute the gene-wise variances and keep only the most variable genes, we use two functions from the `clusterExperiment` package. In particular, `makeFilterStats` will compute the variance of the gene expression data with a given transformation applied to the counts (in this case `log(x+1)`). It will then store the variance values in the `rowData` slot of the object. `filterData` will use the computed values to keep only the desired number of genes.
 
 ```{r}
-dataObj <- makeFilterStats(dataObj, filterStats="var", transFun = log1p)
+dataObj <- makeFilterStats(dataObj, filterStats = "var", transFun = log1p)
 dataObj <- filterData(dataObj, percentile=1000, filterStats="var")
 rowData(dataObj)
 ```
+
+One drawback of this strategy is that the logarithm is not a variance-stabilizing transformation. Variance stabilizing transformations based on the negative binomial distribution are available, e.g., in the `DESeq2` package. And these may be a better choice in real data analyses. Note that the `makeFilterStats` function of `clusterExperiment` can be used with any user-supplied function. Here, we show an example with the `vst` function from `DESeq2`.
+
+```{r, eval=FALSE}
+library(DESeq2)
+dataObj <- makeFilterStats(dataObj, filterStats = "var", transFun = vst,
+                           filterNames = "var_vst")
+dataObj <- filterData(dataObj, percentile=1000, filterStats="var_vst")
+```
+
+Alternatively, the `scran` package [@Lun2016] includes the `trendVar` and `decomposeVar` functions, which estimate the mean-variance relation and the technical and biological components of the variance, to select those genes with a high biological variance. See [@Lun2016] for details.
+
+<!-- An example of how to integrate that strategy in this workflow is provided here. Note that to follow `scran` recommendations we first normalize the data using the `scran` method. -->
+
+<!-- ```{r, eval=FALSE} -->
+<!-- library(scran) -->
+<!-- dataScran <- computeSumFactors(dataObj) -->
+<!-- dataScran <- normalize(dataScran) -->
+
+<!-- tv <- trendVar(dataScran, use.spikes = FALSE) -->
+<!-- dv <- decomposeVar(dataScran, fit = tv) -->
+<!-- ``` -->
+
+<!-- The results of `dv$bio` can then be used to sort the genes and keep the top 1,000. -->
+
+DR: I'm not sure whether to keep this last example using scran. It's more complicated because we cannot directly use the clusterExperiment functions and it's somewhat involved (we would need to explain what the size factors are etc.). Also, the results make no sense (negative variances!). Perhaps we should just mention the method without the code?
 
 ## Dataset structure
 
@@ -224,7 +271,7 @@ Overall, after the above pre-processing steps, our dataset has 1,000 genes and 7
 dataObj
 ```
 
-Metadata for the cells are stored in the slot `colData` from the `SummarizedExperiment` object. Cells were processed in 18 different batches.
+Metadata for the cells are stored in the slot `colData` from the `SummarizedExperiment` object. Cells were processed in 18 different runs of the Fluidigm C1 system: we refer to each run as a "batch", and we refer to the technical differences between each run as "batch effects". Note that in this particular case, the batch structure is essentially defined by the limitation of the C1 system to process up to 96 cells at a time and it is hence natural to identify each C1 run as one batch. Batch effects are ubiquitous in high-throughput genomics [@leek2010tackling] and single-cell RNA-seq is not an exception [@hicks2017missing]. In other contexts, depending on experimental design, batches may correspond to different library preparations, different labs in which the data is processed, or different times at which samples were collected.
 
 ```{r batch}
 batch <- colData(dataObj)$Batch
@@ -296,12 +343,14 @@ abline(h=0)
 
 The principal component analysis (PCA) of the normalized values shows that, as expected, cells do not cluster by batch but by the original clusters (Figure \@ref(fig:pcanorm)). Overall, it seems that normalization was effective at removing batch effects without removing biological signal, in spite of the partial nesting of batches within clusters.
 
-```{r pcanorm, fig.cap="ZINB-WaVE: PCA of normalized expression measures, where each point represents a cell. Cells are color-coded by batch (left panel) and by original published clustering (right panel)."}
+```{r pcanorm, fig.cap="ZINB-WaVE: PCA of normalized expression measures, where each point represents a cell. Cells are color-coded by batch (left panel) and by original published clustering (right panel).", fig.height=2.5}
 pca <- prcomp(t(norm))
 par(mfrow = c(1,2))
 plot(pca$x, col = col_batch[batch], pch = 20, main = "")
 plot(pca$x, col = col_clus[as.character(publishedClusters)], pch = 20, main = "")
 ```
+
+DR: do we actually need the PCA plots? The whole point of zinbwave is dimensionality reduction, I think it's very confusing to do PCA here, even before showing the results of zinbwave...
 
 We are going to set these normalized values to be our first assay, so that they become the default in future plots.
 
