@@ -406,13 +406,35 @@ print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
 load('dataObj_afterRSEC.rda')
 ```
 
-The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examinemakeConsensus)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap accross rows. The first row correspond to a consensus clustering across all candidate clusterings.
+The correspondance between the clusters we found here and the original clusters is as follows.
 
-```{r examinemakeConsensus, fig.cap="RSEC: Candidate clusterings found using the function RSEC from the clusterExperiment package."}
-plotClusters(dataObj)
+```{r tabagain}
+table(data.frame(original = publishedClusters, ours = primaryClusterNamed(dataObj)))
 ```
 
-DR: Is there a way to check the older results? Where do I find the saved objects?
+To facilitate the comparison between our results and the original clusters, we set a color scheme that allows a direct visual comparison with Figure \@ref(fig:stemcelldiff). We can change the clustering color scheme using `clusterExperiment`'s `recolorClusters` function.
+
+```{r colors}
+new_col <- col_clus[c("1", "4", "12", "3", "10", "15", "9")]
+names(new_col) <- paste0("c", 1:7)
+dataObj <- recolorClusters(dataObj, value = new_col)
+```
+
+Cluster name | Description | Color | Correspondence
+-------------|-------------|-------| ----------
+c1 | HBC | green | original 1, 5
+c2 | mSUS | magenta | original 4, 7
+c3 | mOSN  | orange | original 9, 12 
+c4 | GBC | cyan | original 2, 3, 11
+c5 | Immature Neuron | purple | original 10, 14
+c6 | MV | blue | original 15
+c7 | mOSN | yellow | original 9
+
+The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examinemakeConsensus)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap accross rows. The first row correspond to a consensus clustering across all candidate clusterings.
+
+```{r examinemakeConsensus, fig.cap="RSEC: Candidate clusterings found using the function RSEC from the clusterExperiment package. The top row corresponds to the consensus clustering and is color-coded accordingly. The other rows correspond to the individual clustering across which the consensus was computed. In each row, the color is chosen to match as close as possible the color of the cluster from the previous row with the largest overlap."}
+plotClusters(dataObj, existingColors = "firstOnly")
+```
 
 The `plotCoClustering` function produces a heatmap of the co-clustering matrix, which records, for each pair of cells, the proportion of times they were clustered together across the candidate clusters (Figure \@ref(fig:plotcoclust)). 
 
@@ -480,21 +502,7 @@ We now demonstrate how to use the Bioconductor package `slingshot` to infer bran
 
 This analysis is performed by the `slingshot` function and the results are stored in a `SlingshotDataSet` object. The minimal input to this function is a low-dimensional representation of the cells and a set of cluster labels; these can be separate objects (ie. a matrix and a vector) or, as below, components of a `SingleCellExperiment` object. When a `SingleCellExperiment` object is provided as input, the ouput will be an updated `SingleCellExperiment` object containing a `SlingshotDataSet` as an element of the `int_metadata` list, which can be accessed through the `SlingshotDataSet` function. For more low-level control of the lineage inference procedure, the two steps of fitting the MST and the simultaneous principal curves may be run separately via the functions `getLineages` and `getCurves`.
 
-From the original published work, we know that the start cluster should correspond to HBCs and the end clusters to MV, mOSN, and mSUS cells. Additionally, we know that GBCs should be at a junction before the differentiation between MV and mOSN cells (Figure \@ref(fig:stemcelldiff)). The correspondance between the clusters we found here and the original clusters is as follows.
-
-```{r tabagain}
-table(data.frame(original = publishedClusters, ours = primaryClusterNamed(dataObj)))
-```
-
-Cluster name | Description | Color | Correspondence
--------------|-------------|-------| ----------
-c1 | HBC | red | original 1, 5
-c2 | mSUS | blue | original 4, 7
-c3 | mOSN  | green | original 9, 12 
-c4 | GBC | orange | original 2, 3, 11
-c5 | Immature Neuron | purple | original 10, 14
-c6 | MV | brown | original 15
-c7 | mOSN | light blue | original 9
+From the original published work, we know that the start cluster should correspond to HBCs and the end clusters to MV, mOSN, and mSUS cells. Additionally, we know that GBCs should be at a junction before the differentiation between MV and mOSN cells (Figure \@ref(fig:stemcelldiff)). 
 
 To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the Slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of Slingshot, where we only provide the identity of the start cluster but not of the end clusters.
 
@@ -544,7 +552,11 @@ pseudoCeSup <- slingshot(pseudoCe, reducedDim = "MDS", start.clus = "c1",
 
 After assigning the cells to lineages and ordering them within lineages, we are interested in finding genes that have non-constant expression patterns over pseudotime. 
 
-More formally, for each lineage, we use the robust local regression method loess to model in a flexible, non-linear manner the relationship between a gene's normalized expression measures and pseudotime. We then can test the null hypothesis of no change over time for each gene using the `gam` package. We implement this approach for the neuronal lineage and display the expression measures of the top 100 genes by p-value in the heatmap of Figure \@ref(fig:heatmapsignificant). 	
+More formally, for each lineage, we use the robust local regression method loess to model in a flexible, non-linear manner the relationship between a gene's normalized expression measures and pseudotime. We then can test the null hypothesis of no change over time for each gene using the `gam` package. 
+
+Generalized Additive Models (GAMs) [@gam] are a class of models that replaces the usual linear function of the coefficients with a sum of smooth functions. In the code below, we use a special case of the GAM in which only one covariate (pseudotime) is present. This correspond to a simple loess regression, but with the added advantage of providing a framework for the testing of the significance of the association between pseudotime and expression.
+
+We implement this approach for the neuronal lineage and display the expression measures of the top 100 genes by p-value in the heatmap of Figure \@ref(fig:heatmapsignificant). 	
 
 ```{r fitgam}
 t <- colData(pseudoCe)$slingPseudotime_1

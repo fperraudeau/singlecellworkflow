@@ -27,7 +27,7 @@ Definitely. We should mention these. Perhaps even use these methods instead of z
 
 Major comments:
 
-1. There is something wrong with the data download link in the F1000 version so that I am unable to download these files and actually reproduce the workflow. I experimented a bit to see if I could figure out how to download the data anyways, but will reserve further evaluation of this submission until this issue can be resolved by the authors.
+> 1. There is something wrong with the data download link in the F1000 version so that I am unable to download these files and actually reproduce the workflow. I experimented a bit to see if I could figure out how to download the data anyways, but will reserve further evaluation of this submission until this issue can be resolved by the authors.
 
 ```{r}
 urls = c("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE95601&format=file&file=GSE95601%5FoeHBCdiff% "https://raw.githubusercontent.com/rufletch/p63-HBC-diff/master/ref/oeHBCdiff_clusterLabels.)
@@ -35,15 +35,15 @@ urls = c("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE95601&format=file&fi
 
 Not sure what's wrong with the F1000 version. Perhaps the links are not rendered correctly? Let's look into this and make sure that the data can be downloaded.
  
-2a. This workflow will likely be out-of-date when the underlying packages transition to use SingleCellExperiment. This is actually a positive thing because many of the more opaque lines of code (involving subsetting ERCC genes, etc) will be more streamlined.
+> 2a. This workflow will likely be out-of-date when the underlying packages transition to use SingleCellExperiment. This is actually a positive thing because many of the more opaque lines of code (involving subsetting ERCC genes, etc) will be more streamlined.
 
 Correct. Let's look into keeping the ERCC spike-ins in the object.
 
-2b. It requires installation of the development branch of bioconductor, which impacts the usefulness of the workflow to the average user. I expect the authors will revise this tutorial when Bioconductor 3.6 is released and use of the devel branch is no longer necessary. Additionally `slingshot` is an requirement, but currently only exists on github and no SHA1 provided. I hope that `slingshot` will be added as a bioconductor package shortly. In the meantime, a tag must be added to the git repo for the release being used in this workflow and instructions provided for how to install this tag. Additionally, the authors may wish to note that installation instructions for the packages will be provided at the end of the workflow so that someone proceeding sequentially will not be tripped up.
+> 2b. It requires installation of the development branch of bioconductor, which impacts the usefulness of the workflow to the average user. I expect the authors will revise this tutorial when Bioconductor 3.6 is released and use of the devel branch is no longer necessary. Additionally `slingshot` is an requirement, but currently only exists on github and no SHA1 provided. I hope that `slingshot` will be added as a bioconductor package shortly. In the meantime, a tag must be added to the git repo for the release being used in this workflow and instructions provided for how to install this tag. Additionally, the authors may wish to note that installation instructions for the packages will be provided at the end of the workflow so that someone proceeding sequentially will not be tripped up.
 
 Slingshot is in Bioconductor now. Good point about the installation instructions being at the end. I think we can provide a short section on installation at the beginning.
 
-2c. Opaque code is presented in order to generate plots, e.g.
+> 2c. Opaque code is presented in order to generate plots, e.g.
 ```{r}
 palDF <- ceObj@clusterLegend[[1]]
 pal <- palDF[, "color"]
@@ -52,16 +52,16 @@ pal["-1"] = "transparent"
 plot(fit$points, col = pal[primaryClusterNamed(ceObj)], main = "", pch = 20, xlab = "Component1", ylab = "Component2") legend(x = "topleft", legend = names(pal), cex = .5, fill = pal, title = "Sample")
 ```
 
-While this complexity may be necessary, perhaps some of it could be encapsulated as accessor functions in the package? Too much complexity here may cause users to miss the forest for the trees.  
+> While this complexity may be necessary, perhaps some of it could be encapsulated as accessor functions in the package? Too much complexity here may cause users to miss the forest for the trees.  
 
 The plotReduceDim() function now addresses this.
  
-The authors could better motivate (or at least explain the impact of) some of the default parameters and procedures.
-Why do we set a zcut threshold of 3 for the `scone` filtering? 
-Why K=50 for zinbwave?
-RSEC parameters
+> The authors could better motivate (or at least explain the impact of) some of the default parameters and procedures.
+> Why do we set a zcut threshold of 3 for the `scone` filtering? 
+> Why K=50 for zinbwave?
+> RSEC parameters
 
-How should a user decide on a value for these parameters?
+> How should a user decide on a value for these parameters?
 
 These are all great points. We should address them in more deatails.
 
@@ -97,24 +97,22 @@ We agree, that the reference to the model is too specific. We have modified the 
 
 > Figure 6: Can you change the figure width so that PC1 is not squished?
 
-Yes, Figure 6 has been changed.
+We actually dropped Figure 6 as using the low-dimensional signal from ZINB-WaVE (rather than PCA on the normalized counts) is the recommended way to visualize the results, and we thought that it was confusing for the reader to show PCA at this stage of the workflow.
 
 > Is there a circularity to the recovery of published clusters in Figure 6? Was ZINB-WaVE used in Fletcher (2017)?
 
 ZINB-WaVE was not used in the original paper, which used a more complex normalization strategy, based on regressing out a set of QC measures. One key result in favor of the ZINB-WaVE projection is that with this method slingshot is able to estimate the correct lineages with minimal supervision (only the starting cluster), while in the original paper, one of the terminal states had to be specified.
 
-DR: Make sure this is true.
+DR: Make sure that with the original analysis we had to use a semi-supervised approach.
 
 > Can you say what the meaning of the color white is in Figure 8 (in the text or caption near this figure)?
 
-Yes, let's explain better the plot.
+We have added a better description of the Figure in the caption.
 
 > Figure 15 refers back to Figure 2 but does not use the same color scheme for the known cell types, so the reader cannot verify if you've recovered the lineages from the publication. It would be good therefore to have a legend for these figures (Fig 15 and following) indicating which cell types the colors refer to (this information is in the unlabeled table above, but should be included as a legend here).
 
-I think it would be easier to change the colors right after the table in which we compare to the published results and keep the color consistent for the rest of the workflow. Elizabeth, is there a wrapper function to change colors without manually changing the clusterLegend? 
-
-@Davide: Yes, there is a new function `recolorClusters` and `renameClusters` to change name or colors in a specific clustering. Also there is the `plotClusterLegend` function that could be used here to create a legend.
+Thanks for the suggestion, we agree that having a similar color scheme will help the reader make the connection between the results of Figure 15 and Figure 2. We have changed the colors to match as close as possible those of the published figure. Note that we do this right after the clustering step, so that all figures (from Figure 8 to Figure 17) have consistent colors.
 
 > Can you briefly describe what a GAM is ahead of Figure 17?
 
-Yes, we can.
+We have added a sentence describing GAMs ahead of Figure 17.
