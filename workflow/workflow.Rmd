@@ -68,6 +68,9 @@ It was found that the first bifurcation produces two lineage trajectories: the f
 
 In this workflow, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes x cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
 
+Note that the preprocessing steps needed to produce such a count matrix from the raw FASTQ files are outside of the scope of this paper. These are very important steps that should be taken with care and the optimal workflow depends on the technology and the protocol used to collect the data (e.g, 3' end sequencing, droplet-based methods versus full-length mRNA, plate-based methods). 
+One way to carry out these steps within the Bioconductor framework is the `scPipe` package [@tian2017scpipe], which provides functions to quantify gene expression starting from raw sequencing files. More details can be found in the `scPipe` vignette, available at https://bioconductor.org/packages/scPipe.
+
 ## Package installation and versions
 
 The source code to reproduce the analysis in the workflow are available at https://github.com/fperraudeau/singlecellworkflow. The packages used in the workflow can be installed using the following in R:
@@ -104,10 +107,10 @@ set.seed(20)
 
 ## Parallel computing
 
-To give an idea to the users of the time needed to run the workflow, function `system.time` was used to report computation times for the time consuming functions. Computations were performed with 2 cores on a iMac with a 4 GHz Intel Core i7 processor and 32 GB of RAM. The `BiocParallel` package is used to allow for parallel computing in the `zinbwave` function. Users with a different operating system may change the package used for parallel computing and the `NCORES` variable below.
+To give an idea to the users of the time needed to run the workflow, function `system.time` was used to report computation times for the time consuming functions. Computations were performed with 6 cores on a iMac with a 4 GHz Intel Core i7 processor and 32 GB of RAM. The `BiocParallel` package is used to allow for parallel computing in the `zinbwave` function. Users with a different operating system may change the package used for parallel computing and the `NCORES` variable below.
 
 ```{r parallel}
-NCORES <- 2
+NCORES <- 6
 mysystem = Sys.info()[["sysname"]]
 if (mysystem == "Darwin"){
   registerDoParallel(NCORES)
@@ -341,17 +344,6 @@ boxplot(norm_order, col = col_order, staplewex = 0, outline = 0,
 abline(h=0)
 ```
 
-The principal component analysis (PCA) of the normalized values shows that, as expected, cells do not cluster by batch but by the original clusters (Figure \@ref(fig:pcanorm)). Overall, it seems that normalization was effective at removing batch effects without removing biological signal, in spite of the partial nesting of batches within clusters.
-
-```{r pcanorm, fig.cap="ZINB-WaVE: PCA of normalized expression measures, where each point represents a cell. Cells are color-coded by batch (left panel) and by original published clustering (right panel).", fig.height=2.5}
-pca <- prcomp(t(norm))
-par(mfrow = c(1,2))
-plot(pca$x, col = col_batch[batch], pch = 20, main = "")
-plot(pca$x, col = col_clus[as.character(publishedClusters)], pch = 20, main = "")
-```
-
-DR: do we actually need the PCA plots? The whole point of zinbwave is dimensionality reduction, I think it's very confusing to do PCA here, even before showing the results of zinbwave...
-
 We are going to set these normalized values to be our first assay, so that they become the default in future plots.
 
 ```{r setNormAssay}
@@ -379,6 +371,35 @@ plot(fit$points, col = col_clus[as.character(publishedClusters)], main = "",
 legend(x = "topleft", legend = unique(names(col_clus)), cex = .5, 
        fill = unique(col_clus), title = "Sample")
 ```
+
+Overall, it seems that `zinbwave` was effective at removing batch effects without removing biological signal, in spite of the partial nesting of batches within clusters.
+
+### Choice of K 
+
+The most important parameter to choose for the dimensionality reduction step is the number of hidden covariates to be included in the model, i.e., the number of columns of the hidden matrix `W`, which we indicate with `K`. One way to select the optimal value of `K` is to compare different values in terms of Akaike information criterion (AIC) and Bayesian information criterion (BIC). The `zinbwave` package provides two functions to compute such quantities, `zinbAIC` and `zinbBIC`.
+
+Here, we fit a few different models, specifying a different value of `K`, using the `zinbFit` function, which, unlike `zinbwave`, returns the estiamtes of all the parameters of the model, as well as the value of the likelihood function.
+
+```{r, eval=FALSE}
+k_values <- c(1: 5, 10)
+
+fit <- lapply(k_values, function(k) zinbFit(dataObj, K = k, which_assay = "counts"))
+saveRDS(fit, file = "Fit_allK.rds")
+```
+
+```{r}
+fit <- readRDS("fit_allK.rds")
+plot(k_values, sapply(fit, zinbBIC, t(counts(dataObj))), 
+     ylab = "BIC", xlab = "K", type = "b")
+plot(k_values, sapply(fit, zinbAIC, t(counts(dataObj))),
+     ylab = "AIC", xlab = "K", type = "b")
+```
+
+In this case, the BIC suggests a value of `K = 3`, while the AIC suggests a value of `K = 10`.
+
+Note, that since ZINB-WaVE is linear in the number of genes and number of cells, and quadratic on `K`, fitting multiple models and comparing their goodness-of-fit is infeasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K=10` and `K=20` are reasonable choices in real datasets.
+
+DR: There is quite a difference between AIC and BIC in this case, and it is actually hard to argue one value over another... how should we discussed these results?
 
 ## Cell clustering: RSEC
 
@@ -589,9 +610,15 @@ DR: I think that it will be nice to showcase the getBestFeatures function here a
 
 DR: Not sure if we need this section. The previous future developments are now done (nice!). Perhaps here we should talk about scalability and HDF5? Kelly, is there anything you want to add here on DE along lineages?
 
-# Conclusion
+# Conclusions
 
 This workflow provides a tutorial for the analysis of scRNA-seq data in R/Bioconductor. It covers four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages; and (4) DE analysis along lineages. The workflow is general and flexible, allowing the user to sustitute the statistical method used in each step by a different method. We hope our proposed workflow will ease technical aspects of scRNA-seq data analysis and help with the discovery of novel biological insights.
+
+## Alternative approaches
+
+Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared "language" among Bioconductor's scRNA-seq software packages, makes it extremely easy to change one of the step above to use a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal to the code structure above. This makes the present workflow a truly modular approach, in which a user can use their favorite tool for each step with the guarantee that the output of the step will be readable by the next step.
+
+An alternative normalization strategy is to compute gene and cell-specific scaling factors (e.g., `SCNorm` [@bacher2017scnorm]). Similarly, `monocle` [@trapnell2014dynamics] or `TSCAN` [@ji2016tscan] for cell lineage inference. Finally, the software suites `Seurat` [@seurat] (available on CRAN) and `scde` [@kharchenko2014bayesian] provide alternative pipelines for cell type discovery, differential expression, and gene set analysis. A comprehensive list of tools developed for the analysis of scRNA-seq data is available through at https://www.scrna-tools.org [@zappia2018exploring]. 
 
 # Software availability
 

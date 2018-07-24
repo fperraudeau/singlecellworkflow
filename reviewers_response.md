@@ -1,18 +1,25 @@
 For now, this are just notes, we should make this a polished response.
 
+## Open questions
+
+1. Do we need PCA? I think that we don't and I have removed it, but if you feel strongly for including it, we can put it back.
+2. Do we need to include all the convoluted preprocessing to go from GEO to a SingleCellExperiment? I actually have a SingleCellExperiment object saved on Github. I see arguments both for and against... it may actually be useful for people to see how to create a SCE from scratch.
+3. Should we include spike-ins in the SingleCellExperiment object? I think so because one reviewer explicitly mentions it, but it makes it harder to carry out all the steps.
+4. Discussion about choice of K. AIC/BIC don't seem to provide a good answer. What should we do?
+
 ## Reviewer 1 (Stephanie Hicks)
 
 > 1. In this workflow, the authors start with a count table. However, the majority of researchers will start with raw reads (e.g. a FASTQ file). It would be great if the author discussed current best practices for the quantification step of scRNA-seq data. Alternatively, the authors could point to other references that have already been developed.
 
-We do refer to Aaron's workflow at the beginning, but we should make it more clear. We should also mention `scPipe`.
+We agree that giving guidance to the readers on how to quantify gene expression in scRNA-seq data is an important topic. However, we feel that it is outside the scope of this paper. We have included a reference to the `scPipe` Bioconductor package, which provides functions to quantify gene expression starting from raw data.
  
 > 2. I would like to see the authors take advantage of the rich functionality and data exploration tools for cell- and gene-specific quality control (QC) introduced in low-level analysis workflows such as the one from Lun et al. (2016). Also, in this workflow, the authors create multiple SummarizedExperiment objects (e.g. one with only the top 1000 highly variable genes (HVGs), one with all genes, etc). This doesn’t seem efficient, especially with large single cell data sets such as the 1.3 million cells from embryonic mouse brains. I think both of these concerns can now be addressed with efforts such as the recently developed SingleCellExperiment Bioconductor object (https://github.com/drisso/SingleCellExperiment). For example, the authors could add a “USE” column in the gene- or cell-specific meta table to represent whether or not a particular gene in a particular cell met the filtering criteria applied. The authors could store W in the reduceDim assay of the SingleCellExperiment object.
 
-We now make full use of the SingleCellExperiment class. We also show how to store the variance in the object and how to filter based on those values.
- 
+We agree with the reviewer that the previous version of the workflow was not very efficient in terms of data representation. This was due to the fact that the tools employed in the different steps expected slightly different inputs. We have now harmonized all the tools to expect as input and produce as output an object of class `SingleCellExperiment`, including storing the dimensionality reduced matrix `W` in the `reducedDim` slot and storing the gene-wise variances as a column in the `rowData` for better subsetting and filtering.
+
 > 3. In ZINB-WaVE, the authors specify the number of dimensions for the low-dimensional space (K) to be K=50. Could the authors add more details for the reader explaining why they picked K=50 and describe situations in which a user would want to specify a higher or lower K? In particular, it would be useful to discuss computational time in terms of number of genes and cells. Also, it would be useful to note that if you only wanted to use ZINB-WaVE to remove known covariates for normalization, you can use K=0. 
 
-Note that a more comprehensive discussion on the role of K on computational time is elsewhere (the zinbwave paper). The question of how to choose K is a very important one, but I'm not sure a workflow is the right place to discuss it in details. We should definitely give more guidance to the user on how to pick K. Perhaps we should compute a few values and compare the results in terms of AIC/BIC.
+The question of how to choose K is a very important one and a more comprehensive discussion on the role of K, both on accuracy and computational time, is in the original ZINB-WaVE paper. However, we agree that giving more guidance on the choice of K is a needed addition to this workflow. We have added a section, called "Choice of K", that discusses two functions, `zinbAIC` and `zinbBIC`, that can be used to decide the best value of `K` for a given dataset.
 
 > Minor comments:
 > 1. When selecting the top 1000 HVGs, why do the authors not take into account the overall mean-variance relationship and only select genes based on the variance?
@@ -21,7 +28,7 @@ This is mostly for illustration purposes, but we do find in our experience that 
 
 > 2. It would be great if the authors referenced other tools available for similar analyses currently available. For example there are several available packages for normalization of scRNA-seq data, such as calculating global scaling factors can be done with scran (https://bioconductor.org/packages/release/bioc/html/scran.html) or gene and cell-specific scaling factors using SCnorm (https://github.com/rhondabacher/SCnorm). Alternatively, users might want to try using relative transcript counts using Census (https://bioconductor.org/packages/release/bioc/html/monocle.html).
 
-Definitely. We should mention these. Perhaps even use these methods instead of zinbwave's normalized counts.
+This is a good suggestion. We have added a new section at the end of the workflow, named "Alternative approaches", that discusses these and other strategies for dimensionality reduction, normalization, clustering, and batch correction.
 
 ## Reviewer 2 (Andrew McDavid)
 
@@ -33,15 +40,15 @@ Major comments:
 urls = c("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE95601&format=file&file=GSE95601%5FoeHBCdiff% "https://raw.githubusercontent.com/rufletch/p63-HBC-diff/master/ref/oeHBCdiff_clusterLabels.)
 ```
 
-Not sure what's wrong with the F1000 version. Perhaps the links are not rendered correctly? Let's look into this and make sure that the data can be downloaded.
- 
+We apologized with the reviewer. Something must have happened during the formatting of the article for production on the F1000 Research website that omitted some of the characters from the url. The links work with no issues in the R markdown version of the workflow, available at https://github.com/fperraudeau/singlecellworkflow. We will make sure that the new version of the article does not have this problem.
+
 > 2a. This workflow will likely be out-of-date when the underlying packages transition to use SingleCellExperiment. This is actually a positive thing because many of the more opaque lines of code (involving subsetting ERCC genes, etc) will be more streamlined.
 
-Correct. Let's look into keeping the ERCC spike-ins in the object.
+The reviewer is correct. We now make full use of the features of SingleCellExperiment and as a result the code is much cleaner and easier to understand.
 
 > 2b. It requires installation of the development branch of bioconductor, which impacts the usefulness of the workflow to the average user. I expect the authors will revise this tutorial when Bioconductor 3.6 is released and use of the devel branch is no longer necessary. Additionally `slingshot` is an requirement, but currently only exists on github and no SHA1 provided. I hope that `slingshot` will be added as a bioconductor package shortly. In the meantime, a tag must be added to the git repo for the release being used in this workflow and instructions provided for how to install this tag. Additionally, the authors may wish to note that installation instructions for the packages will be provided at the end of the workflow so that someone proceeding sequentially will not be tripped up.
 
-Slingshot is in Bioconductor now. Good point about the installation instructions being at the end. I think we can provide a short section on installation at the beginning.
+Slingshot is now a Bioconductor package, albeit in the devel branch for now. Since the new release is only a few months away, we have decided to require the use of Bioconductor 3.8 (currently devel, but soon release). We think that this is the best choice to avoid the workflow to be outdated later this year. We have added the code at the beginning to show how to install the required packages, using the new recommended `BiocManager` package.
 
 > 2c. Opaque code is presented in order to generate plots, e.g.
 ```{r}
@@ -54,7 +61,7 @@ plot(fit$points, col = pal[primaryClusterNamed(ceObj)], main = "", pch = 20, xla
 
 > While this complexity may be necessary, perhaps some of it could be encapsulated as accessor functions in the package? Too much complexity here may cause users to miss the forest for the trees.  
 
-The plotReduceDim() function now addresses this.
+We have created the `plotReduceDims()` function in `clusterExperiment` to address this issue.
  
 > The authors could better motivate (or at least explain the impact of) some of the default parameters and procedures.
 > Why do we set a zcut threshold of 3 for the `scone` filtering? 
@@ -63,7 +70,9 @@ The plotReduceDim() function now addresses this.
 
 > How should a user decide on a value for these parameters?
 
-These are all great points. We should address them in more deatails.
+We agree with the reviewer that more details on the choice of these parameters are needed.
+As the choice of `K` for the `zinbwave` model is critical, we have added a new section that describes a way to compare different values of `K` and select the best.
+As for the `zcut` threshold and the `RSEC` parameters, we have added a paragraph in the appropriate section describing in more details what the parameters control and what are good rules of thumb to set them to an appropriate value. [TODO]
 
 ## Reviewer 3 (Mike Love)
 
