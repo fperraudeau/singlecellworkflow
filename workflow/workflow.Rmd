@@ -314,15 +314,15 @@ knitr::include_graphics("zinb_schema.png")
 
 As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the users include more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
 
-```{r zinb,eval=FALSE}
-print(system.time(dataObj <- zinbwave(dataObj, K = 50, X = "~ Batch",
+```{r zinb,eval=TRUE}
+print(system.time(dataObj <- zinbwave(dataObj, K = 10, X = "~ Batch",
                                       residuals = TRUE, 
                                       normalizedValues = TRUE)))
 ```
 
 ```{r}
-#save(dataObj, file= 'dataObj_afterZinbwave.rda')
-load('dataObj_afterZinbwave.rda')
+save(dataObj, file= 'dataObj_afterZinbwave_k10.rda')
+#load('dataObj_afterZinbwave.rda')
 ```
 
 ### Normalization
@@ -407,7 +407,7 @@ The next step of the workflow is to cluster the cells according to the low-dimen
 
 Here, we are applying `RSEC` to the low-dimensional `W` matrix from ZINB-WaVE. To do so, we need to specify the `reducedDim` slot to use with the `reduceMethod` option. Here, we skip the merging step to collapse similar clusters based on the amount of differential gene expression between them. In larger dataset, this step may prevent results characterized by a large number of very small clusters (see [@Risso2018] for details).
 
-```{r rsec_50,eval=FALSE}
+```{r rsec_50,eval=TRUE}
 print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
                                 betas = 0.8, reduceMethod="zinbwave",
                                 clusterFunction = "hierarchical01", minSizes=1,
@@ -423,8 +423,8 @@ print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
 ```
 
 ```{r}
-#save(dataObj, file = 'dataObj_afterRSEC.rda')
-load('dataObj_afterRSEC.rda')
+save(dataObj, file = 'dataObj_afterRSEC_k10.rda')
+#load('dataObj_afterRSEC.rda')
 ```
 
 The correspondance between the clusters we found here and the original clusters is as follows.
