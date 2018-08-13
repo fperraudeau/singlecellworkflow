@@ -314,15 +314,15 @@ knitr::include_graphics("zinb_schema.png")
 
 As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the users include more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
 
-```{r zinb,eval=TRUE}
+```{r zinb,eval=FALSE}
 print(system.time(dataObj <- zinbwave(dataObj, K = 10, X = "~ Batch",
                                       residuals = TRUE, 
                                       normalizedValues = TRUE)))
 ```
 
 ```{r}
-save(dataObj, file= 'dataObj_afterZinbwave_k10.rda')
-#load('dataObj_afterZinbwave.rda')
+#save(dataObj, file= 'dataObj_afterZinbwave_k10.rda')
+load('dataObj_afterZinbwave_k10.rda')
 ```
 
 ### Normalization
@@ -388,6 +388,7 @@ saveRDS(fit, file = "Fit_allK.rds")
 ```
 
 ```{r}
+k_values <- c(1: 5, 10)
 fit <- readRDS("fit_allK.rds")
 plot(k_values, sapply(fit, zinbBIC, t(counts(dataObj))), 
      ylab = "BIC", xlab = "K", type = "b")
