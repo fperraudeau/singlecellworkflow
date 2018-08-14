@@ -396,11 +396,11 @@ plot(k_values, sapply(fit, zinbAIC, t(counts(dataObj))),
      ylab = "AIC", xlab = "K", type = "b")
 ```
 
-In this case, the BIC suggests a value of `K = 3`, while the AIC suggests a value of `K = 10`.
+In this case, the BIC suggests a value of `K = 3`, while the AIC suggests a value of `K >= 10`.
 
-Note, that since ZINB-WaVE is linear in the number of genes and number of cells, and quadratic on `K`, fitting multiple models and comparing their goodness-of-fit is infeasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K=10` and `K=20` are reasonable choices in real datasets.
+Note, that since ZINB-WaVE is linear in the number of genes and number of cells, and quadratic on `K`, fitting multiple models and comparing their goodness-of-fit is infeasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K` between 10 and 50 are reasonable choices in real datasets.
 
-DR: There is quite a difference between AIC and BIC in this case, and it is actually hard to argue one value over another... how should we discussed these results?
+DR: There is quite a difference between AIC and BIC in this case, and it is actually hard to argue one value over another... how should we discussed these results? Also, if I keep going AIC will keep decreasing...
 
 ## Cell clustering: RSEC
 
@@ -448,9 +448,9 @@ c1 | HBC | green | original 1, 5
 c2 | mSUS | magenta | original 4, 7
 c3 | mOSN  | orange | original 9, 12 
 c4 | GBC | cyan | original 2, 3, 11
-c5 | Immature Neuron | purple | original 10, 14
+c5 | Neuronal Precursors | purple | original 10, 14
 c6 | MV | blue | original 15
-c7 | mOSN | yellow | original 9
+c7 | Immature Neurons | yellow | original 9
 
 The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examinemakeConsensus)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap accross rows. The first row correspond to a consensus clustering across all candidate clusterings.
 
@@ -607,10 +607,6 @@ DR: here, describe the transformData and plotHeatmap function. Above, probably r
 
 DR: I think that it will be nice to showcase the getBestFeatures function here as well as our observational weights.
 
-## Further developments
-
-DR: Not sure if we need this section. The previous future developments are now done (nice!). Perhaps here we should talk about scalability and HDF5? Kelly, is there anything you want to add here on DE along lineages?
-
 # Conclusions
 
 This workflow provides a tutorial for the analysis of scRNA-seq data in R/Bioconductor. It covers four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages; and (4) DE analysis along lineages. The workflow is general and flexible, allowing the user to sustitute the statistical method used in each step by a different method. We hope our proposed workflow will ease technical aspects of scRNA-seq data analysis and help with the discovery of novel biological insights.
@@ -620,6 +616,10 @@ This workflow provides a tutorial for the analysis of scRNA-seq data in R/Biocon
 Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared "language" among Bioconductor's scRNA-seq software packages, makes it extremely easy to change one of the step above to use a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal to the code structure above. This makes the present workflow a truly modular approach, in which a user can use their favorite tool for each step with the guarantee that the output of the step will be readable by the next step.
 
 An alternative normalization strategy is to compute gene and cell-specific scaling factors (e.g., `SCNorm` [@bacher2017scnorm]). Similarly, `monocle` [@trapnell2014dynamics] or `TSCAN` [@ji2016tscan] for cell lineage inference. Finally, the software suites `Seurat` [@seurat] (available on CRAN) and `scde` [@kharchenko2014bayesian] provide alternative pipelines for cell type discovery, differential expression, and gene set analysis. A comprehensive list of tools developed for the analysis of scRNA-seq data is available through at https://www.scrna-tools.org [@zappia2018exploring]. 
+
+## Further developments
+
+DR: Not sure if we need this section. The previous future developments are now done (nice!). Perhaps here we should talk about scalability and HDF5? Kelly, is there anything you want to add here on DE along lineages?
 
 # Software availability
 
