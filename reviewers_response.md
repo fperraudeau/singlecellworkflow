@@ -4,15 +4,16 @@ For now, this are just notes, we should make this a polished response.
 
 1. Do we need PCA? I think that we don't and I have removed it, but if you feel strongly for including it, we can put it back.
 2. Do we need to include all the convoluted preprocessing to go from GEO to a SingleCellExperiment? I actually have a SingleCellExperiment object saved on Github. I see arguments both for and against... it may actually be useful for people to see how to create a SCE from scratch.
-3. Should we include spike-ins in the SingleCellExperiment object? I think so because one reviewer explicitly mentions it, but it makes it harder to carry out all the steps.
+3. Should we include spike-ins in the SingleCellExperiment object? I think so because one reviewer explicitly mentions it, but it makes it harder to carry out all the steps. For now, I am keeping them, showing with some EDA that are not very useful and removing them.
 4. Discussion about choice of K. AIC/BIC don't seem to provide a good answer. What should we do?
+5. Many of the parameters that we specify in RSEC are default. On one hand it would be nice to leave them so that we don't have to explain them (see comment from reviewer 2), but on the other hand it would be more reproducible if we decide to change the default values later... what should we do?
 
 ## Reviewer 1 (Stephanie Hicks)
 
 > 1. In this workflow, the authors start with a count table. However, the majority of researchers will start with raw reads (e.g. a FASTQ file). It would be great if the author discussed current best practices for the quantification step of scRNA-seq data. Alternatively, the authors could point to other references that have already been developed.
 
 We agree that giving guidance to the readers on how to quantify gene expression in scRNA-seq data is an important topic. However, we feel that it is outside the scope of this paper. We have included a reference to the `scPipe` Bioconductor package, which provides functions to quantify gene expression starting from raw data.
- 
+
 > 2. I would like to see the authors take advantage of the rich functionality and data exploration tools for cell- and gene-specific quality control (QC) introduced in low-level analysis workflows such as the one from Lun et al. (2016). Also, in this workflow, the authors create multiple SummarizedExperiment objects (e.g. one with only the top 1000 highly variable genes (HVGs), one with all genes, etc). This doesn’t seem efficient, especially with large single cell data sets such as the 1.3 million cells from embryonic mouse brains. I think both of these concerns can now be addressed with efforts such as the recently developed SingleCellExperiment Bioconductor object (https://github.com/drisso/SingleCellExperiment). For example, the authors could add a “USE” column in the gene- or cell-specific meta table to represent whether or not a particular gene in a particular cell met the filtering criteria applied. The authors could store W in the reduceDim assay of the SingleCellExperiment object.
 
 We agree with the reviewer that the previous version of the workflow was not very efficient in terms of data representation. This was due to the fact that the tools employed in the different steps expected slightly different inputs. We have now harmonized all the tools to expect as input and produce as output an object of class `SingleCellExperiment`, including storing the dimensionality reduced matrix `W` in the `reducedDim` slot and storing the gene-wise variances as a column in the `rowData` for better subsetting and filtering.
@@ -24,11 +25,11 @@ The question of how to choose K is a very important one and a more comprehensive
 > Minor comments:
 > 1. When selecting the top 1000 HVGs, why do the authors not take into account the overall mean-variance relationship and only select genes based on the variance?
 
-This is mostly for illustration purposes, but we do find in our experience that naively selecting most variable genes gives a good set of informative genes, perhaps because it selects on/off genes. We have expanded this section to add a discussion about different strategies that account for the structure of the data can be employed.
+This is mostly for illustration purposes, but we do find in our experience that naively selecting most variable genes gives a good set of informative genes, perhaps because it selects on/off genes. We have expanded this section to add a discussion about alternative strategies, which use the mean-variance relation observed in RNA-seq data.
 
 > 2. It would be great if the authors referenced other tools available for similar analyses currently available. For example there are several available packages for normalization of scRNA-seq data, such as calculating global scaling factors can be done with scran (https://bioconductor.org/packages/release/bioc/html/scran.html) or gene and cell-specific scaling factors using SCnorm (https://github.com/rhondabacher/SCnorm). Alternatively, users might want to try using relative transcript counts using Census (https://bioconductor.org/packages/release/bioc/html/monocle.html).
 
-This is a good suggestion. We have added a new section at the end of the workflow, named "Alternative approaches", that discusses these and other strategies for dimensionality reduction, normalization, clustering, and batch correction.
+Thanks for the suggestion. We have added a new section at the end of the workflow, named "Alternative approaches", that discusses these and other strategies for dimensionality reduction, normalization, clustering, and batch correction.
 
 ## Reviewer 2 (Andrew McDavid)
 
@@ -72,7 +73,7 @@ We have created the `plotReduceDims()` function in `clusterExperiment` to addres
 
 We agree with the reviewer that more details on the choice of these parameters are needed.
 As the choice of `K` for the `zinbwave` model is critical, we have added a new section that describes a way to compare different values of `K` and select the best.
-As for the `zcut` threshold and the `RSEC` parameters, we have added a paragraph in the appropriate section describing in more details what the parameters control and what are good rules of thumb to set them to an appropriate value. [TODO]
+As for the `zcut` threshold and the `RSEC` parameters, we have added a paragraph in the appropriate section describing in more details what the parameters control and what are good rules of thumb to set them to an appropriate value.
 
 ## Reviewer 3 (Mike Love)
 
@@ -82,7 +83,7 @@ We have modified the section "Package version" to include a link to the source c
 
 > I was confused a bit by "the first major bifurcation in the HBC lineage trajectory occurs prior to cell division". Can you be more specific about what you are referring to here by cell division, as without knowledge of the system, I'm not sure where the cell division you refer to should appear.
 
-Thank you, we agree that the paragraph taken out of context is unclear. The first bifurcation identified by slingshot (occurring right after the clusters marked by DeltaHBC1 and DeltaHBC2 in Figure 2) produces two lineage trajectories: the first one (purple curve in Figure 2) generates sustentacular cells through a differentiation process characterized by the absence of cell cycle and division. To simplify, each HBC stem cells gives rise to one sustentacular cell. The other lineage trajectory (blue and orange curves in Figure 2) generates proliferative GBCs, which are characterized by cell cycle and division. These, in turn, generate olfactory sensory neurons and microvillous cells. We hope that this more detailed explanation will be useful to better understand our system. We have updated the text to add this more detailed explanation.
+Thank you, we agree that the paragraph taken out of context is unclear. The first bifurcation identified by slingshot (occurring right after the clusters marked by DeltaHBC1 and DeltaHBC2 in Figure 2) produces two lineage trajectories: the first one (purple curve in Figure 2) generates sustentacular cells through a differentiation process characterized by the absence of cell cycle and division. To simplify, each HBC stem cell gives rise to one sustentacular cell. The other lineage trajectories (blue and orange curves in Figure 2) generate proliferative GBCs, which are characterized by cell cycle and division. These, in turn, generate olfactory sensory neurons and microvillous cells. We hope that this will be useful to better understand our system. We have updated the text to add this more detailed explanation.
 
 > "within a single object": It may be good to explain what an "object" here is. You could, for example, refer to Figure 2 of the Bioconductor Nature Methods paper.
 
@@ -98,11 +99,11 @@ Thank you, this is a very good point. See also comment by Reviewer 1 about model
 
 > "correcting for batch effects": What are batch effects? (Of course, I know what they are, but a reader may not, and you could cite some of the single cell literature here.)
 
-We have expanded our discussion on batch effects to include an explanation of what we mean by this term in this specific example and more generally.
+We have moved our discussion on batch effects to a new section earlier in the workflow and we have expanded it to include an explanation of what we mean by "batch effects" in this specific example and more generally.
 
 > "Note that, in this case, the low-dimensional matrix W is not included in the computation of residuals to avoid the removal of the biological signal of interest.": I understood this sentence only on a second pass through. One problem is that you haven't defined W in the text yet (only in Figure 4). I would only reference the matrix W if you have defined it.
 
-We agree, that the reference to the model is too specific. We have modified the sentence. [TODO -- still not sure how to best describe this step]
+We agree that the reference to W taken out of context is hard to understand. In the revised version we introduce the matrix W in the previous paragraph making it more explicit what is its interpretation.
 
 > Figure 6: Can you change the figure width so that PC1 is not squished?
 
@@ -111,8 +112,6 @@ We actually dropped Figure 6 as using the low-dimensional signal from ZINB-WaVE 
 > Is there a circularity to the recovery of published clusters in Figure 6? Was ZINB-WaVE used in Fletcher (2017)?
 
 ZINB-WaVE was not used in the original paper, which used a more complex normalization strategy, based on regressing out a set of QC measures. One key result in favor of the ZINB-WaVE projection is that with this method slingshot is able to estimate the correct lineages with minimal supervision (only the starting cluster), while in the original paper, one of the terminal states had to be specified.
-
-DR: Make sure that with the original analysis we had to use a semi-supervised approach.
 
 > Can you say what the meaning of the color white is in Figure 8 (in the text or caption near this figure)?
 
@@ -124,4 +123,4 @@ Thanks for the suggestion, we agree that having a similar color scheme will help
 
 > Can you briefly describe what a GAM is ahead of Figure 17?
 
-We have added a sentence describing GAMs ahead of Figure 17.
+We have added a sentence describing GAMs and a reference ahead of Figure 17.

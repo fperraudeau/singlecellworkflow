@@ -157,25 +157,11 @@ E <- E[rowSums(E)>0,]
 dim(E)
 ```
 
-We remove the ERCC spike-in sequences and the CreER gene, as the latter corresponds to the estrogen receptor fused to Cre recombinase (Cre-ER), which is used to activate HBCs into differentiation following injection of tamoxifen (see [@Fletcher2017] for details).
-
-DR: Consider keeping the spike-ins in the object to show the ability of SCE to use spike-ins... but we don't use them, so not sure how important it is.
-
-```{r}
-# Remove ERCC and CreER genes
-cre <- E["CreER",]
-ercc <- E[grep("^ERCC-", rownames(E)),]
-E <- E[grep("^ERCC-", rownames(E), invert = TRUE), ]
-E <- E[-which(rownames(E)=="CreER"), ]
-dim(E)
-```
-
 The cell-level metadata contain quality control measures, sequencing batch ID, and cluster and lineage labels from the original publication [@Fletcher2017]. Cells with a cluster label of `-2` were not assigned to any cluster in the original publication.
 
 ```{r}
 # Extract QC metrics
 qc <- as.matrix(protocolData(Cufflinks_eSet)@data)[,c(1:5, 10:18)]
-qc <- cbind(qc, CreER = cre, ERCC_reads = colSums(ercc))
 
 # Extract metadata
 batch <- droplevels(pData(Cufflinks_eSet)$MD_c1_run_id)
@@ -202,7 +188,84 @@ dataObj <- SingleCellExperiment(assays = list(counts = E),
 dataObj
 ```
 
-Using the Bioconductor R package `scone` [@Cole235382], we remove low-quality cells according to the quality control filter implemented in the function `metric_sample_filter` and based on the following criteria (Figure \@ref(fig:scone)): (1) Filter out samples with low total number of reads or low alignment percentage and (2) filter out samples with a low detection rate for housekeeping genes. See the [scone vignette](https://www.bioconductor.org/packages/release/bioc/vignettes/scone/inst/doc/sconeTutorial.html) for details on the filtering procedure.
+There are three special sets of genes in this dataset: the CreER gene corresponds to the estrogen receptor fused to Cre recombinase (Cre-ER), which is used to activate HBCs into differentiation following injection of tamoxifen (see [@Fletcher2017] for details); the Sox2-eGFP transgenic was used for FACS sorting; the ERCC spike-in sequences are synthetic genes spiked-in at known concentrations and used as quality controls.
+
+We can specify spike-in genes withing the `SingleCellExperiment` class. In this way, it is easier to retrieve their expression. In addition, some specific functions may make direct use of this information (see, e.g., the `computeSpikeFactors` function in the `scran` package).
+
+In this case, we specify two different sets of spike-ins, the ERCC spike-ins and the transgenic genes (eGFP and Cre-ER). This is a slight abuse of notation, as the CreER and eGFP genes are not exactly spike-ins, but it is nonetheless useful to specify that this is not an endogenous gene.
+
+```{r}
+# Mark ERCC and CreER genes as spike-ins
+isSpike(dataObj, "ERCC") <- grepl("^ERCC-", rownames(dataObj))
+isSpike(dataObj, "Transgene") <- grepl("^CreER$", rownames(dataObj)) | 
+                                  grepl("^eGFP$", rownames(dataObj)) 
+```
+
+We can access a specific set of spike-ins (or all of them) by using the `isSpike` function.
+
+```{r}
+table(isSpike(dataObj))
+table(isSpike(dataObj, "Transgene"))
+```
+
+The total number of reads mapped to spike-ins is often a good quality-control measure. Hence, we include that into our `colData`. 
+
+```{r}
+ercc <- counts(dataObj[isSpike(dataObj, "ERCC"),])
+colData(dataObj)$ERCC_reads <- colSums(ercc)
+```
+
+## Exploratory data analysis
+
+Cells were processed in 18 different runs of the Fluidigm C1 system: we refer to each run as a "batch", and we refer to the technical differences between each run as "batch effects". Note that in this particular case, the batch structure is essentially defined by the limitation of the C1 system to process up to 96 cells at a time and it is hence natural to identify each C1 run as one batch. Batch effects are ubiquitous in high-throughput genomics [@leek2010tackling] and single-cell RNA-seq is not an exception [@hicks2017missing]. In other contexts, depending on experimental design, batches may correspond to different library preparations, different labs in which the data is processed, or different times at which samples were collected.
+
+```{r batch}
+batch <- colData(dataObj)$Batch
+col_batch = c(brewer.pal(9, "Set1"), brewer.pal(8, "Dark2"), 
+              brewer.pal(8, "Accent")[1])
+names(col_batch) = unique(batch)
+table(batch)
+```
+
+Often, different batches differ in terms of data quality. In particular, we observed that the number of reads mapping to spike-ins can differ dramatically across batches.
+
+```{r spikebatch, fig.cap="Distribution of reads mapped onto ERCC spike-ins per batch."}
+boxplot(colData(dataObj)$ERCC_reads~batch, col = col_batch,
+        outline = 0, ylab="Expression measure", las = 3)
+```
+
+Figure \@ref(fig:spikebatch) shows how for some batches no reads are mapped to ERCC spike-ins, presumably because the spike-ins were not included. Since the utility of the spike-ins is limited in this example, we remove the spike-ins from our object.
+
+```{r}
+dataObj <- dataObj[!isSpike(dataObj),]
+dataObj <- clearSpikes(dataObj)
+```
+
+In the original work [@Fletcher2017], cells were clustered into 14 different clusters, with 151 cells not assigned to any cluster (i.e., cluster label of `-2`). 
+
+```{r original}
+publishedClusters <- colData(dataObj)[, "publishedClusters"]
+col_clus <- c("transparent", "#1B9E77", "antiquewhite2", "cyan", "#E7298A", 
+              "#A6CEE3", "#666666", "#E6AB02", "#FFED6F", "darkorchid2", 
+              "#B3DE69", "#FF7F00", "#A6761D", "#1F78B4")
+names(col_clus) <- sort(unique(publishedClusters))
+table(publishedClusters)
+```
+
+Note that there is partial nesting of batches within clusters (i.e., cell type), which could be problematic when correcting for batch effects in the dimensionality reduction step below.
+
+```{r clustbatch}
+table(data.frame(batch = as.vector(batch),
+                 cluster = publishedClusters))
+```
+
+## Sample filtering
+
+Using the Bioconductor package `scone` [@Cole235382], we remove low-quality cells according to the quality control filter implemented in the function `metric_sample_filter` and based on the following criteria (Figure \@ref(fig:scone)): (1) Filter out samples with low total number of reads or low alignment percentage and (2) filter out samples with a low detection rate for housekeeping genes. For each criterion, a sample is filtered out if it is below a user-defined hard threshold (which we leave at default value) or an adaptive threshold, defined in terms of number of standard deviations from the mean or median absolute deviation from the median.
+
+The main parameter to set in this function is `zcut`, which represents the number of standard deviations from the mean and median absolute deviation from the median to use as threshold. We empirically found that using a threshold of three works well for typical datasets.
+
+See the [scone vignette](https://www.bioconductor.org/packages/release/bioc/vignettes/scone/inst/doc/sconeTutorial.html) for details on the filtering procedure.
 
 ```{r scone, fig.cap="SCONE: Filtering of low-quality cells."}
 # QC-metric-based sample-filtering
@@ -274,34 +337,6 @@ Overall, after the above pre-processing steps, our dataset has 1,000 genes and 7
 dataObj
 ```
 
-Metadata for the cells are stored in the slot `colData` from the `SummarizedExperiment` object. Cells were processed in 18 different runs of the Fluidigm C1 system: we refer to each run as a "batch", and we refer to the technical differences between each run as "batch effects". Note that in this particular case, the batch structure is essentially defined by the limitation of the C1 system to process up to 96 cells at a time and it is hence natural to identify each C1 run as one batch. Batch effects are ubiquitous in high-throughput genomics [@leek2010tackling] and single-cell RNA-seq is not an exception [@hicks2017missing]. In other contexts, depending on experimental design, batches may correspond to different library preparations, different labs in which the data is processed, or different times at which samples were collected.
-
-```{r batch}
-batch <- colData(dataObj)$Batch
-col_batch = c(brewer.pal(9, "Set1"), brewer.pal(8, "Dark2"), 
-              brewer.pal(8, "Accent")[1])
-names(col_batch) = unique(batch)
-table(batch)
-```
-
-In the original work [@Fletcher2017], cells were clustered into 14 different clusters, with 151 cells not assigned to any cluster (i.e., cluster label of `-2`). 
-
-```{r original}
-publishedClusters <- colData(dataObj)[, "publishedClusters"]
-col_clus <- c("transparent", "#1B9E77", "antiquewhite2", "cyan", "#E7298A", 
-              "#A6CEE3", "#666666", "#E6AB02", "#FFED6F", "darkorchid2", 
-              "#B3DE69", "#FF7F00", "#A6761D", "#1F78B4")
-names(col_clus) <- sort(unique(publishedClusters))
-table(publishedClusters)
-```
-
-Note that there is partial nesting of batches within clusters (i.e., cell type), which could be problematic when correcting for batch effects in the dimensionality reduction step below.
-
-```{r clustbatch}
-table(data.frame(batch = as.vector(batch),
-                 cluster = publishedClusters))
-```
-
 ## Normalization and dimensionality reduction: ZINB-WaVE
 
 In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime ordering, and the identification of DE genes. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low-dimensional signal of interest [@Peer2017; @Pierson2015; @Risso2017].
@@ -312,7 +347,9 @@ Here, we perform dimensionality reduction using the zero-inflated negative binom
 knitr::include_graphics("zinb_schema.png")
 ```
 
-As with most dimensionality reduction methods, the user needs to specify the number of dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the users include more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
+The model can be thought of as a generalization of a factor analysis model, in which the biological signal of interest is assumed to be explained by a small number of "factors", represented in the model by the matrix `W` (Figure \@ref(fig:zinbschema)).
+
+As with most dimensionality reduction methods, the user needs to specify the number of factors (`K`, the number of columns of `W`), which correspond to the dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the users include more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
 
 ```{r zinb,eval=FALSE}
 print(system.time(dataObj <- zinbwave(dataObj, K = 50, X = "~ Batch",
@@ -337,6 +374,7 @@ norm[1:3,1:3]
 As expected, the normalized values no longer exhibit batch effects (Figure \@ref(fig:boxplotNorm)).
 
 ```{r boxplotNorm, fig.cap="ZINB-WaVE: Boxplots of normalized expression measures (deviance residuals), color-coded by batch."}
+batch <- colData(dataObj)$Batch
 norm_order <- norm[, order(as.numeric(batch))]
 col_order <- col_batch[batch[order(as.numeric(batch))]]
 boxplot(norm_order, col = col_order, staplewex = 0, outline = 0,
@@ -366,8 +404,8 @@ In this workflow, the user-supplied dimension `K` of the low-dimensional space i
 ```{r mdsW, fig.cap="ZINB-WaVE: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by original published clustering."}
 d <- dist(W)
 fit <- cmdscale(d, eig = TRUE, k = 2)
-plot(fit$points, col = col_clus[as.character(publishedClusters)], main = "",
-     pch = 20, xlab = "Component 1", ylab = "Component 2")
+plot(fit$points, col = col_clus[as.character(colData(dataObj)$publishedClusters)],
+     main = "", pch = 20, xlab = "Component 1", ylab = "Component 2")
 legend(x = "topleft", legend = unique(names(col_clus)), cex = .5, 
        fill = unique(col_clus), title = "Sample")
 ```
@@ -411,13 +449,12 @@ Here, we are applying `RSEC` to the low-dimensional `W` matrix from ZINB-WaVE. T
 ```{r rsec_50,eval=FALSE}
 print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
                                 betas = 0.8, reduceMethod="zinbwave",
-                                clusterFunction = "hierarchical01", minSizes=1,
-                                ncores = NCORES, isCount=FALSE,
+                                clusterFunction = "hierarchical01",
+                                ncores = NCORES,
                                 dendroReduce="zinbwave",
                                 subsampleArgs = list(resamp.num=100,
                                            clusterFunction="kmeans",
                                           clusterArgs=list(nstart=10)),
-                                verbose=TRUE,
                                 consensusProportion = 0.7,
                                 mergeMethod = "none", random.seed=424242,
                                 consensusMinSize = 10)))
@@ -428,10 +465,22 @@ print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
 load('dataObj_afterRSEC.rda')
 ```
 
-The correspondance between the clusters we found here and the original clusters is as follows.
+As one can see from the code above, there are many parameters that a user can set in RSEC. Many of the values that we choose are the default values of the function, but we nonetheless specify them for clarity and reproducibility. Here, we briefly describethe role of the parameters that we set, but a more comprehensive explanation is provided in the function's man page (`?RSEC`) and in [@Risso2018].
+
+- `k0s`: the values of `k` to start the sequential algorithm.
+- `alphas`: similarity required in the clustering of the subsampling similarity matrix (larger alphas are less stringent).
+- `betas`: similarity required to deem a cluster "stable" in sequential clustering (larger betas require greater similarity).
+- `dendroReduce`: the dimensionality reduction to use for the creation of the dendrogram of the found clusters.
+- `subsampleArgs`: a list of parameters for the subsample clustering; here we specified the base clustering function as k-means, the number of resamplings and the number of starting values for the k-means algorithm.
+- `consensusProportion`: the proportion of times that two sets of samples should be together in order to be grouped into a cluster.
+- `mergeMethod`: our consensus clustering may find too many small clusters. If that's the case a merging step can be employed to merge clusters that do not show enough differential expression. Here, we skip this step by setting the method as "none".
+- `consensusMinSize`: minimum size required for a set of samples to be considered in a cluster; clusters smaller than this number will be removed and the corresponding samples will be set to "unclustered" (`-1`).
+
+The correspondence between the clusters we found here and the original clusters is as follows.
 
 ```{r tabagain}
-table(data.frame(original = publishedClusters, ours = primaryClusterNamed(dataObj)))
+table(data.frame(original = colData(dataObj)$publishedClusters,
+                 ours = primaryClusterNamed(dataObj)))
 ```
 
 To facilitate the comparison between our results and the original clusters, we set a color scheme that allows a direct visual comparison with Figure \@ref(fig:stemcelldiff). We can change the clustering color scheme using `clusterExperiment`'s `recolorClusters` function.
@@ -603,23 +652,21 @@ plotHeatmap(pseudoCe1[topgenes,], clusterSamplesData = "orderSamplesValue",
 
 DR: here, describe the transformData and plotHeatmap function. Above, probably right after RSEC, explain the ClusterExperiment class and its relation to SCE.
 
-## Differential expression between clusters
-
-DR: I think that it will be nice to showcase the getBestFeatures function here as well as our observational weights.
-
 # Conclusions
 
 This workflow provides a tutorial for the analysis of scRNA-seq data in R/Bioconductor. It covers four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages; and (4) DE analysis along lineages. The workflow is general and flexible, allowing the user to sustitute the statistical method used in each step by a different method. We hope our proposed workflow will ease technical aspects of scRNA-seq data analysis and help with the discovery of novel biological insights.
 
 ## Alternative approaches
 
-Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared "language" among Bioconductor's scRNA-seq software packages, makes it extremely easy to change one of the step above to use a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal to the code structure above. This makes the present workflow a truly modular approach, in which a user can use their favorite tool for each step with the guarantee that the output of the step will be readable by the next step.
+Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared "language" among Bioconductor's scRNA-seq software packages, makes it extremely easy to change one of the step above to use a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal chenges to the code structure above. This makes the present workflow a truly modular approach, in which a user can employ their favorite tool for each step with the guarantee that the output of the step will be readable by the next step.
 
-An alternative normalization strategy is to compute gene and cell-specific scaling factors (e.g., `SCNorm` [@bacher2017scnorm]). Similarly, `monocle` [@trapnell2014dynamics] or `TSCAN` [@ji2016tscan] for cell lineage inference. Finally, the software suites `Seurat` [@seurat] (available on CRAN) and `scde` [@kharchenko2014bayesian] provide alternative pipelines for cell type discovery, differential expression, and gene set analysis. A comprehensive list of tools developed for the analysis of scRNA-seq data is available through at https://www.scrna-tools.org [@zappia2018exploring]. 
+An alternative normalization strategy is to compute gene and cell-specific scaling factors (e.g., `SCNorm` [@bacher2017scnorm]). Similarly, `monocle` [@trapnell2014dynamics] or `TSCAN` [@ji2016tscan] are alternatives for cell lineage inference. Finally, the software suites `Seurat` [@seurat] (available on CRAN) and `scde` [@kharchenko2014bayesian] provide alternative pipelines for cell type discovery, differential expression, and gene set analysis. A comprehensive list of tools developed for the analysis of scRNA-seq data is available at https://www.scrna-tools.org [@zappia2018exploring]. 
 
 ## Further developments
 
-DR: Not sure if we need this section. The previous future developments are now done (nice!). Perhaps here we should talk about scalability and HDF5? Kelly, is there anything you want to add here on DE along lineages?
+Thanks to the availability of droplet-based protocols, such as Drop-Seq and 10X Genomics Chromium, it is now becoming routine to generate datasets made of tens of thousands of cells. In fact, big collaborative projects such as the Human Cell Atlas [@regev2017science] and the BRAIN Initiative Cell Census Network [@ecker2017brain] will soon generate millions, if not billions, of cells. Hence, there is a growing need for scalable methods.
+
+When datasets are too large to be fully stored in memory, HDF5 files [@folk2011overview] can be used to keep the data on disk and realize in memory only the subset of data needed at each step. We are in the process of updating the `clusterExperiment` and `zinbwave` packages to work with HDF5 files and we are developing more scalable methods to deal with massive datasets.
 
 # Software availability
 
