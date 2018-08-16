@@ -9,6 +9,6 @@
 * We provide a brief description of batch effects in the context of scRNA-seq.
 * We use a more consistent color-scheme throughout the manuscript.
 * We provide a brief explanation of Generalized Additive Models (GAMs).
-* We have added guidance on how to choose the value of `K`.
+* We have added guidance on how to choose the values of the parameters of the most important functions, with particular focus on how to choose `K` in `zinbwave`.
 * We have added a section that describes alternative approaches.
 * We have fixed the url to GEO that were broken in the F1000 Research version of the workflow.

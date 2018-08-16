@@ -1,13 +1,3 @@
-For now, this are just notes, we should make this a polished response.
-
-## Open questions
-
-1. Do we need PCA? I think that we don't and I have removed it, but if you feel strongly for including it, we can put it back.
-2. Do we need to include all the convoluted preprocessing to go from GEO to a SingleCellExperiment? I actually have a SingleCellExperiment object saved on Github. I see arguments both for and against... it may actually be useful for people to see how to create a SCE from scratch.
-3. Should we include spike-ins in the SingleCellExperiment object? I think so because one reviewer explicitly mentions it, but it makes it harder to carry out all the steps. For now, I am keeping them, showing with some EDA that are not very useful and removing them.
-4. Discussion about choice of K. AIC/BIC don't seem to provide a good answer. What should we do?
-5. Many of the parameters that we specify in RSEC are default. On one hand it would be nice to leave them so that we don't have to explain them (see comment from reviewer 2), but on the other hand it would be more reproducible if we decide to change the default values later... what should we do?
-
 ## Reviewer 1 (Stephanie Hicks)
 
 > 1. In this workflow, the authors start with a count table. However, the majority of researchers will start with raw reads (e.g. a FASTQ file). It would be great if the author discussed current best practices for the quantification step of scRNA-seq data. Alternatively, the authors could point to other references that have already been developed.
@@ -23,6 +13,7 @@ We agree with the reviewer that the previous version of the workflow was not ver
 The question of how to choose K is a very important one and a more comprehensive discussion on the role of K, both on accuracy and computational time, is in the original ZINB-WaVE paper. However, we agree that giving more guidance on the choice of K is a needed addition to this workflow. We have added a section, called "Choice of K", that discusses two functions, `zinbAIC` and `zinbBIC`, that can be used to decide the best value of `K` for a given dataset.
 
 > Minor comments:
+>
 > 1. When selecting the top 1000 HVGs, why do the authors not take into account the overall mean-variance relationship and only select genes based on the variance?
 
 This is mostly for illustration purposes, but we do find in our experience that naively selecting most variable genes gives a good set of informative genes, perhaps because it selects on/off genes. We have expanded this section to add a discussion about alternative strategies, which use the mean-variance relation observed in RNA-seq data.
@@ -33,8 +24,8 @@ Thanks for the suggestion. We have added a new section at the end of the workflo
 
 ## Reviewer 2 (Andrew McDavid)
 
-Major comments:
-
+> Major comments:
+>
 > 1. There is something wrong with the data download link in the F1000 version so that I am unable to download these files and actually reproduce the workflow. I experimented a bit to see if I could figure out how to download the data anyways, but will reserve further evaluation of this submission until this issue can be resolved by the authors.
 
 ```{r}
@@ -68,7 +59,7 @@ We have created the `plotReduceDims()` function in `clusterExperiment` to addres
 > Why do we set a zcut threshold of 3 for the `scone` filtering? 
 > Why K=50 for zinbwave?
 > RSEC parameters
-
+>
 > How should a user decide on a value for these parameters?
 
 We agree with the reviewer that more details on the choice of these parameters are needed.

@@ -3,11 +3,13 @@ title: "Bioconductor workflow for single-cell RNA sequencing: Normalization, dim
 author: 
     
   - name: Fanny Perraudeau
-    affiliation: Graduate Group in Biostatistics, University of California, Berkeley, Berkeley, CA
+    affiliation: 
+      - Graduate Group in Biostatistics, University of California, Berkeley, Berkeley, CA
+      - Whole Biome, Inc., San Francisco, CA
   - name: Davide Risso
     affiliation: Division of Biostatistics and Epidemiology, Department of Healthcare Policy and Research, Weill Cornell Medicine, New York, NY
   - name: Kelly Street
-    affilitation: Graduate Group in Biostatistics, University of California, Berkeley, Berkeley, CA
+    affiliation: Graduate Group in Biostatistics, University of California, Berkeley, Berkeley, CA
   - name: Elizabeth Purdom
     affiliation: Department of Statistics, University of California, Berkeley, Berkeley, CA
   - name: Sandrine Dudoit
@@ -37,13 +39,13 @@ knitr::opts_chunk$set(fig.align="center", fig.width=5, fig.height=5)
 
 # Introduction
 
-Single-cell RNA sequencing (scRNA-seq) is a powerful and promising class of high-throughput assays that enable researchers to measure genome-wide transcription levels at the resolution of single cells. To properly account for features specific to scRNA-seq, such as zero inflation and high levels of technical noise, several novel statistical methods have been developed to tackle questions that include normalization, dimensionality reduction, clustering, the inference of cell lineages and pseudotimes, and the identification of differentially expressed (DE) genes. While each individual method is useful on its own for addressing a specific question, there is an increasing need for workflows that integrate these tools to yield a seamless scRNA-seq data analysis pipeline. This is all the more true, with novel sequencing technologies that allow an increasing number of cells to be sequenced in each run. For example, the Chromium Single Cell 3' Solution was recently used to sequence and profile about 1.3 million cells from embryonic mouse brains. 
+Single-cell RNA sequencing (scRNA-seq) is a powerful and promising class of high-throughput assays that enable researchers to measure genome-wide transcription levels at the resolution of single cells. To properly account for features specific to scRNA-seq, such as zero inflation and high levels of technical noise, several novel statistical methods have been developed to tackle questions that include normalization, dimensionality reduction, clustering, the inference of cell lineages and pseudotimes, and the identification of differentially expressed (DE) genes. While each individual method is useful on its own for addressing a specific question, there is an increasing need for workflows that integrate these tools to yield a seamless scRNA-seq data analysis pipeline. This is all the more true with novel sequencing technologies that allow an increasing number of cells to be sequenced in each run. For example, the Chromium Single Cell 3' Solution was recently used to sequence and profile about 1.3 million cells from embryonic mouse brains. 
 
 scRNA-seq low-level analysis workflows have already been developed, with useful methods for quality control (QC), exploratory data analysis (EDA), pre-processing, normalization, and visualization. The workflow described in [@Lun2016] and the package `scater` [@McCarthy2017] are such examples based on open-source R software packages from the Bioconductor Project [@Huber2015]. In these workflows, single-cell expression data are organized in objects of the `SingleCellExperiment` class allowing integrated analysis [@SingleCellExperiment]. However, these workflows are mostly used to prepare the data for further downstream analysis and do not focus on steps such as cell clustering and lineage inference.
 
-Here, we propose an integrated workflow for dowstream analysis, with the following four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates, using the `zinbwave` Bioconductor package; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering, as implemented in the `clusterExperiment` Bioconductor package; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages, using the `slingshot` Bioconductor package; and (4) DE analysis along lineages. 
+Here, we propose an integrated workflow for downstream analysis, with the following four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates, using the `zinbwave` Bioconductor package; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering, as implemented in the `clusterExperiment` Bioconductor package; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages, using the `slingshot` Bioconductor package; and (4) DE analysis along lineages. 
 
-One of the cornerstones of Bioconductor is the use of common data structures, implemented as classes in the S4 object-oriented system of R [@huber2015orchestrating].
+One of the cornerstones of Bioconductor is the use of common data containers, implemented as classes in the S4 object-oriented system of R [@huber2015orchestrating].
 Throughout the workflow, we use a single object of the `SingleCellExperiment` class to store the scRNA-seq data along with any gene or cell-level metadata available from the experiment. 
 The `SingleCellExperiment` class [@SingleCellExperiment] is an extension of the `SummarizedExperiment` class [@SummarizedExperiment] specifically designed for single-cell data (see Figure 2 of [@huber2015orchestrating] for an overview of `SummarizedExperiment`).
 The use of the `SingleCellExperiment` class allows us to seamlessly transition between the steps of this workflow, as well as to integrate this workflow with the upstream QC and EDA steps provided in [@Lun2016].
@@ -62,26 +64,27 @@ knitr::include_graphics("stemcelldiff_Fletcher2017_2e.png")
 
 This workflow is illustrated using data from a scRNA-seq study of stem cell differentiation in the mouse olfactory epithelium (OE) [@Fletcher2017]. The olfactory epithelium contains mature olfactory sensory neurons (mOSN) that are continuously renewed in the epithelium via neurogenesis through the differentiation of globose basal cells (GBC), which are the actively proliferating cells in the epithelium. When a severe injury to the entire tissue happens, the olfactory epithelium can regenerate from normally quiescent stem cells called horizontal basal cells (HBC), which become activated to differentiate and reconstitute all major cell types in the epithelium.
 
-The scRNA-seq dataset we use as a case study was generated to study the differentitation of HBC stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. The expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using a statistical analysis pipeline analogous to that in the present workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017; @Risso2017; @Risso2018; @Street2017].
+The scRNA-seq dataset we use as a case study was generated to study the differentiation of HBC stem cells into different cell types present in the olfactory epithelium. To map the developmental trajectories of the multiple cell lineages arising from HBCs, scRNA-seq was performed on FACS-purified cells using the Fluidigm C1 microfluidics cell capture platform followed by Illumina sequencing. The expression level of each gene in a given cell was quantified by counting the total number of reads mapping to it. Cells were then assigned to different lineages using a statistical analysis pipeline analogous to that in the present workflow. Finally, results were validated experimentally using in vivo lineage tracing. Details on data generation and statistical methods are available in [@Fletcher2017; @Risso2017; @Risso2018; @Street2017].
 
-It was found that the first bifurcation produces two lineage trajectories: the first one (purple curve in Figure \@ref(fig:stemcelldiff)) generates mature sustentacular cells (mSUS) through a differentiation process characterized by the absence of cell cycle and division. The other lineage trajectory (blue and orange curves in Figure \@ref(fig:stemcelldiff)) generates proliferative GBCs, which are characterized by cell cycle and division. These, in turn, generate mature olfactory sensory neurons (mOSN; orange curve) and microvillous cells (MV; blue curve).
+It was found that the first bifurcation produces two lineage trajectories: the first one (purple curve in Figure \@ref(fig:stemcelldiff)) generates mature sustentacular cells (mSUS) through a differentiation process characterized by the absence of cell cycle and division. The other lineage trajectory (blue and orange curves in Figure \@ref(fig:stemcelldiff)) generates proliferative GBCs, which are characterized by cell cycle and division. This, in turn, diverges into two lineages that generate mature olfactory sensory neurons (mOSN; orange curve) and microvillous cells (MV; blue curve), respectively.
 
-In this workflow, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes x cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
+In this workflow, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes by cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
 
 Note that the preprocessing steps needed to produce such a count matrix from the raw FASTQ files are outside of the scope of this paper. These are very important steps that should be taken with care and the optimal workflow depends on the technology and the protocol used to collect the data (e.g, 3' end sequencing, droplet-based methods versus full-length mRNA, plate-based methods). 
-One way to carry out these steps within the Bioconductor framework is the `scPipe` package [@tian2017scpipe], which provides functions to quantify gene expression starting from raw sequencing files. More details can be found in the `scPipe` vignette, available at https://bioconductor.org/packages/scPipe.
+One way to carry out these steps within the Bioconductor framework is the `scPipe` package [@tian2017scpipe], which provides functions to quantify gene expression starting from raw sequencing files. More details can be found in the `scPipe` vignette and in [@tian2017scpipe].
 
 ## Package installation and versions
 
-The source code to reproduce the analysis in the workflow are available at https://github.com/fperraudeau/singlecellworkflow. The packages used in the workflow can be installed using the following in R:
+The source code to reproduce the analysis in the workflow is available at https://github.com/fperraudeau/singlecellworkflow. The packages used in the workflow can be installed using the following in R:
 
 ```{r, eval=FALSE}
+# CRAN
 install.packages(c("doParallel", "gam", "RColorBrewer"))
 
+# Bioconductor
 install.packages("BiocManager")
-
 BiocManager::install(c("scone", "zinbwave", "clusterExperiment", "slingshot",
-                       "BiocParallel"))
+                       "BiocParallel", "DESeq2", "scater"))
 ```
 
 Note that in order to successfully run the workflow, we need the following versions
@@ -90,14 +93,11 @@ of the Bioconductor packages `scone (>=1.5.0)`, `zinbwave (>=1.3.2)`, and `clust
 We are now ready to load the packages.
 
 ```{r packages}
-# Bioconductor
 library(BiocParallel)
 library(clusterExperiment)
 library(scone)
 library(zinbwave)
 library(slingshot)
-
-# CRAN
 library(doParallel)
 library(gam)
 library(RColorBrewer)
@@ -132,11 +132,15 @@ Note that in the following, we assume that the user has access to a data folder 
 ```{r datain}
 data_dir <- "../data/"
 
-urls = c("https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE95601&format=file&file=GSE95601%5FoeHBCdiff%5FCufflinks%5FeSet%2ERda%2Egz",
-         "https://raw.githubusercontent.com/rufletch/p63-HBC-diff/master/ref/oeHBCdiff_clusterLabels.txt")
+urls = c(paste0("https://www.ncbi.nlm.nih.gov/geo/download/",
+                "?acc=GSE95601&format=file&file=GSE95601",
+                "%5FoeHBCdiff%5FCufflinks%5FeSet%2ERda%2Egz"),
+         paste0("https://raw.githubusercontent.com/rufletch/",
+                "p63-HBC-diff/master/ref/oeHBCdiff_clusterLabels.txt"))
 
 if(!file.exists(paste0(data_dir, "GSE95601_oeHBCdiff_Cufflinks_eSet.Rda"))) {
-  download.file(urls[1], paste0(data_dir, "GSE95601_oeHBCdiff_Cufflinks_eSet.Rda.gz"))
+  download.file(urls[1], paste0(data_dir, 
+                                "GSE95601_oeHBCdiff_Cufflinks_eSet.Rda.gz"))
   R.utils::gunzip(paste0(data_dir, "GSE95601_oeHBCdiff_Cufflinks_eSet.Rda.gz"))
 }
 
@@ -180,7 +184,7 @@ metadata <- data.frame("Experiment" = bio,
 metadata$publishedClusters[is.na(metadata$publishedClusters)] <- -2
 ```
 
-As discussed abouve, we store the data in an object of the class `SingleCellExperiment`. In addition to keeping the expression values and their associated metadata within a single object, `SingleCellExperiment` allows the user to store normalization factors and the results of dimensionality reduction methods (such as `zinbwave`) within the object. Throughout the workflow, we will highlight when this special features of `SingleCellExperiment` are used.
+As discussed above, we store the data in an object of the class `SingleCellExperiment`. In addition to keeping the expression values and their associated metadata within a single object, `SingleCellExperiment` allows the user to store normalization factors and the results of dimensionality reduction methods (such as `zinbwave`) within the object. Throughout the workflow, we will highlight when this special features of `SingleCellExperiment` are used.
 
 ```{r}
 dataObj <- SingleCellExperiment(assays = list(counts = E),
@@ -192,7 +196,7 @@ There are three special sets of genes in this dataset: the CreER gene correspond
 
 We can specify spike-in genes withing the `SingleCellExperiment` class. In this way, it is easier to retrieve their expression. In addition, some specific functions may make direct use of this information (see, e.g., the `computeSpikeFactors` function in the `scran` package).
 
-In this case, we specify two different sets of spike-ins, the ERCC spike-ins and the transgenic genes (eGFP and Cre-ER). This is a slight abuse of notation, as the CreER and eGFP genes are not exactly spike-ins, but it is nonetheless useful to specify that this is not an endogenous gene.
+In this case, we specify two different sets of spike-ins, the ERCC spike-ins and the transgenic genes (eGFP and Cre-ER). This is a slight abuse of notation, as the CreER and eGFP genes are not exactly spike-ins, but it is nonetheless useful to specify that these are not endogenous genes.
 
 ```{r}
 # Mark ERCC and CreER genes as spike-ins
@@ -215,9 +219,11 @@ ercc <- counts(dataObj[isSpike(dataObj, "ERCC"),])
 colData(dataObj)$ERCC_reads <- colSums(ercc)
 ```
 
+Note that here we use the function `counts()` from the `SingleCellExperiment` package that retrieves the matrix stored in the assay slot named `counts`. This is equivalent to `assay(dataObj, "counts")` but is obviously more convenient when accessing counts multiple times. It is hence a good idea to name the assay slot that stores the original counts "counts", as done above.
+
 ## Exploratory data analysis
 
-Cells were processed in 18 different runs of the Fluidigm C1 system: we refer to each run as a "batch", and we refer to the technical differences between each run as "batch effects". Note that in this particular case, the batch structure is essentially defined by the limitation of the C1 system to process up to 96 cells at a time and it is hence natural to identify each C1 run as one batch. Batch effects are ubiquitous in high-throughput genomics [@leek2010tackling] and single-cell RNA-seq is not an exception [@hicks2017missing]. In other contexts, depending on experimental design, batches may correspond to different library preparations, different labs in which the data is processed, or different times at which samples were collected.
+Cells were processed in 18 different runs of the Fluidigm C1 system: we refer to each run as a "batch", and we refer to the technical differences between each run as "batch effects". Note that in this particular case, the batch structure is essentially defined by the limitation of the C1 system to process up to 96 cells at a time and it is hence natural to identify each C1 run as one batch. Batch effects are ubiquitous in high-throughput genomics [@leek2010tackling] and single-cell RNA-seq is not an exception [@hicks2017missing]. In other contexts, depending on experimental design, batches may correspond to different library preparations, different labs in which the data are processed, or different times at which samples are collected.
 
 ```{r batch}
 batch <- colData(dataObj)$Batch
@@ -231,17 +237,17 @@ Often, different batches differ in terms of data quality. In particular, we obse
 
 ```{r spikebatch, fig.cap="Distribution of reads mapped onto ERCC spike-ins per batch."}
 boxplot(colData(dataObj)$ERCC_reads~batch, col = col_batch,
-        outline = 0, ylab="Expression measure", las = 3)
+        outline = 0, ylab="Reads mapped to ERCC", las = 3)
 ```
 
-Figure \@ref(fig:spikebatch) shows how for some batches no reads are mapped to ERCC spike-ins, presumably because the spike-ins were not included. Since the utility of the spike-ins is limited in this example, we remove the spike-ins from our object.
+Figure \@ref(fig:spikebatch) shows how for some batches no reads were mapped to ERCC spike-ins, presumably because the spike-ins were not included. Since the utility of the spike-ins is limited in this example, we remove the spike-ins from our object.
 
 ```{r}
 dataObj <- dataObj[!isSpike(dataObj),]
 dataObj <- clearSpikes(dataObj)
 ```
 
-In the original work [@Fletcher2017], cells were clustered into 14 different clusters, with 151 cells not assigned to any cluster (i.e., cluster label of `-2`). 
+In the original work [@Fletcher2017], cells were clustered into 14 different clusters, with 233 cells not assigned to any cluster (i.e., cluster label of `-2`). 
 
 ```{r original}
 publishedClusters <- colData(dataObj)[, "publishedClusters"]
@@ -263,10 +269,6 @@ table(data.frame(batch = as.vector(batch),
 
 Using the Bioconductor package `scone` [@Cole235382], we remove low-quality cells according to the quality control filter implemented in the function `metric_sample_filter` and based on the following criteria (Figure \@ref(fig:scone)): (1) Filter out samples with low total number of reads or low alignment percentage and (2) filter out samples with a low detection rate for housekeeping genes. For each criterion, a sample is filtered out if it is below a user-defined hard threshold (which we leave at default value) or an adaptive threshold, defined in terms of number of standard deviations from the mean or median absolute deviation from the median.
 
-The main parameter to set in this function is `zcut`, which represents the number of standard deviations from the mean and median absolute deviation from the median to use as threshold. We empirically found that using a threshold of three works well for typical datasets.
-
-See the [scone vignette](https://www.bioconductor.org/packages/release/bioc/vignettes/scone/inst/doc/sconeTutorial.html) for details on the filtering procedure.
-
 ```{r scone, fig.cap="SCONE: Filtering of low-quality cells."}
 # QC-metric-based sample-filtering
 data("housekeeping")
@@ -279,6 +281,10 @@ mfilt <- metric_sample_filter(counts(dataObj),
                               zcut = 3, mixture = FALSE,
                               plot = TRUE)
 ```
+
+The main parameter to set in this function is `zcut`, which represents the number of standard deviations from the mean and median absolute deviation from the median to use as threshold. We empirically found that using a threshold of three works well for typical datasets.
+
+See the [scone vignette](https://www.bioconductor.org/packages/release/bioc/vignettes/scone/inst/doc/sconeTutorial.html) for details on the filtering procedure.
 
 ```{r sconeFilt}
 # Simplify to a single logical
@@ -303,9 +309,10 @@ dataObj <- filterData(dataObj, percentile=1000, filterStats="var")
 rowData(dataObj)
 ```
 
-One drawback of this strategy is that the logarithm is not a variance-stabilizing transformation. Variance stabilizing transformations based on the negative binomial distribution are available, e.g., in the `DESeq2` package. And these may be a better choice in real data analyses. Note that the `makeFilterStats` function of `clusterExperiment` can be used with any user-supplied function. Here, we show an example with the `vst` function from `DESeq2`.
+One drawback of this strategy is that the logarithm is not a variance-stabilizing transformation. Variance stabilizing transformations based on the negative binomial distribution are available, e.g., in the `DESeq2` package, and may be a better choice in real data analyses. Note that the `makeFilterStats` function of `clusterExperiment` can be used with any user-supplied function. Here, we show an example with the `vst` function from `DESeq2`.
 
 ```{r, eval=FALSE}
+## Not run
 library(DESeq2)
 dataObj <- makeFilterStats(dataObj, filterStats = "var", transFun = vst,
                            filterNames = "var_vst")
@@ -313,21 +320,6 @@ dataObj <- filterData(dataObj, percentile=1000, filterStats="var_vst")
 ```
 
 Alternatively, the `scran` package [@Lun2016] includes the `trendVar` and `decomposeVar` functions, which estimate the mean-variance relation and the technical and biological components of the variance, to select those genes with a high biological variance. See [@Lun2016] for details.
-
-<!-- An example of how to integrate that strategy in this workflow is provided here. Note that to follow `scran` recommendations we first normalize the data using the `scran` method. -->
-
-<!-- ```{r, eval=FALSE} -->
-<!-- library(scran) -->
-<!-- dataScran <- computeSumFactors(dataObj) -->
-<!-- dataScran <- normalize(dataScran) -->
-
-<!-- tv <- trendVar(dataScran, use.spikes = FALSE) -->
-<!-- dv <- decomposeVar(dataScran, fit = tv) -->
-<!-- ``` -->
-
-<!-- The results of `dv$bio` can then be used to sort the genes and keep the top 1,000. -->
-
-DR: I'm not sure whether to keep this last example using scran. It's more complicated because we cannot directly use the clusterExperiment functions and it's somewhat involved (we would need to explain what the size factors are etc.). Also, the results make no sense (negative variances!). Perhaps we should just mention the method without the code?
 
 ## Dataset structure
 
@@ -341,30 +333,25 @@ dataObj
 
 In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime ordering, and the identification of DE genes. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low-dimensional signal of interest [@Peer2017; @Pierson2015; @Risso2017].
 
-Here, we perform dimensionality reduction using the zero-inflated negative binomial-based wanted variation extraction (ZINB-WaVE) method implemented in the Bioconductor R package `zinbwave`. The method fits a ZINB model that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a cell-level intercept, which serves as a global-scaling normalization factor. The user can also specify both gene-level and cell-level covariates. The inclusion of observed and unobserved cell-level covariates enables normalization for complex, non-linear effects (often referred to as batch effects), while gene-level covariates may be used to adjust for sequence composition effects (e.g., gene length and GC-content effects). A schematic view of the ZINB-WaVE model is provided in Figure \@ref(fig:zinbschema). For greater detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
+Here, we perform dimensionality reduction using the zero-inflated negative binomial-based wanted variation extraction (ZINB-WaVE) method implemented in the Bioconductor package `zinbwave`. The method fits a ZINB model that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a cell-level intercept, which serves as a global-scaling normalization factor. The user can also specify both gene-level and cell-level covariates. The inclusion of cell-level covariates enables normalization for batch effects, while gene-level covariates may be used to adjust for sequence composition effects (e.g., gene length and GC-content effects). A schematic view of the ZINB-WaVE model is provided in Figure \@ref(fig:zinbschema). For greater detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
 
-```{r zinbschema, echo=FALSE, out.width="95%", fig.cap="ZINB-WaVE: Schematic view of the ZINB-WaVE model. This figure was reproduced with kind permission from Risso et al. (2017)."}
+```{r zinbschema, echo=FALSE, out.width="95%", fig.cap="ZINB-WaVE: Schematic view of the ZINB-WaVE model. This figure was reproduced with kind permission from Risso et al. (2018)."}
 knitr::include_graphics("zinb_schema.png")
 ```
 
 The model can be thought of as a generalization of a factor analysis model, in which the biological signal of interest is assumed to be explained by a small number of "factors", represented in the model by the matrix `W` (Figure \@ref(fig:zinbschema)).
 
-As with most dimensionality reduction methods, the user needs to specify the number of factors (`K`, the number of columns of `W`), which correspond to the dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the users include more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
+As with most dimensionality reduction methods, the user needs to specify the number of factors (`K`, the number of columns of `W`), which correspond to the dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the user includes more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
 
-```{r zinb,eval=FALSE}
+```{r zinb}
 print(system.time(dataObj <- zinbwave(dataObj, K = 50, X = "~ Batch",
-                                      residuals = TRUE, 
+                                      residuals = TRUE,
                                       normalizedValues = TRUE)))
-```
-
-```{r}
-#save(dataObj, file= 'dataObj_afterZinbwave_k10.rda')
-load('dataObj_afterZinbwave.rda')
 ```
 
 ### Normalization
 
-The function `zinbwave` returns a `SingleCellExperiment` object that includes the normalized expression measures (`notmalizedValues`), defined as deviance residuals from the fit of the ZINB-WaVE model with user-specified gene- and cell-level covariates. Such residuals can be used for visualization purposes (e.g., in heatmaps, boxplots). Note that, in this case, the low-dimensional matrix `W` is not included in the computation of residuals to avoid the removal of the biological signal of interest.
+The function `zinbwave` returns a `SingleCellExperiment` object that includes the normalized expression measures (`notmalizedValues`), defined as deviance residuals from the fit of the ZINB-WaVE model with user-specified gene- and cell-level covariates. Such residuals can be used for visualization purposes (e.g., in heatmaps, boxplots). Note that the low-dimensional matrix `W` is not included in the computation of the residuals to avoid the removal of the biological signal of interest.
 
 ```{r norm}
 norm <- assays(dataObj)$normalizedValues
@@ -382,24 +369,29 @@ boxplot(norm_order, col = col_order, staplewex = 0, outline = 0,
 abline(h=0)
 ```
 
-We are going to set these normalized values to be our first assay, so that they become the default in future plots.
+In addition to the normalized values, the `zinbwave` function added several new components to the object: the assay `residuals` contains the residuals of the model that can be used to check the goodness-of-fit of the model. The `weights` assay contains observational weights that can be used to downweight the effect of zero counts on differential expression (see [@van2018observation] and the `zinbwave` vignette for more details).
 
-```{r setNormAssay}
-assays(dataObj)<-assays(dataObj)[c("normalizedValues","residuals","counts","weights")]
+```{r}
+assayNames(dataObj)
 ```
 
-In addition to the normalized values, the `zinbwave` function added several new components to the object: the assay `residuals` contains the residuals of the model that can be used to check the goodness-of-fit of the model. The `weights` assay contains observational weights that can be used to downweight the effect of zero counts on differential expression (see [@van2018observation] and the `zinbwave` vignette for more details).
+We set the normalized values as our first assay, so that they become the default in the plots below.
+
+```{r setNormAssay}
+assays(dataObj) <- assays(dataObj)[c("normalizedValues", "counts", "weights",
+                                     "residuals")]
+```
 
 ### Dimensionality reduction
 
-Perhaps the most important component of the results of `zinbwave` is the low-dimensional matrix `W`, which is stored as the `zinbwave` component of the `reducedDims` slot of the `SingleCellExperiment` object. This matrix can be retrieved using the `reducedDim()` extractor.
+Perhaps the most important component of the results of `zinbwave` is the low-dimensional matrix `W`, stored as the `zinbwave` component of the `reducedDims` slot of the `SingleCellExperiment` object. This matrix contain the biological signal of interest and can be retrieved using the `reducedDim()` extractor.
 
 ```{r}
 W <- reducedDim(dataObj)
 W[1:3,1:3]
 ```
 
-In this workflow, the user-supplied dimension `K` of the low-dimensional space is set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results in a scatterplot with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).  
+In this workflow, the user-supplied dimension `K` of the low-dimensional space was set to `K = 50`. The resulting low-dimensional matrix `W` can be visualized in two dimensions by performing multi-dimensional scaling (MDS) using the Euclidian distance. To verify that `W` indeed captures the biological signal of interest, we display the MDS results in a scatterplot with colors corresponding to the original published clusters (Figure \@ref(fig:mdsW)).  
 
 ```{r mdsW, fig.cap="ZINB-WaVE: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by original published clustering."}
 d <- dist(W)
@@ -416,29 +408,28 @@ Overall, it seems that `zinbwave` was effective at removing batch effects withou
 
 The most important parameter to choose for the dimensionality reduction step is the number of hidden covariates to be included in the model, i.e., the number of columns of the hidden matrix `W`, which we indicate with `K`. One way to select the optimal value of `K` is to compare different values in terms of Akaike information criterion (AIC) and Bayesian information criterion (BIC). The `zinbwave` package provides two functions to compute such quantities, `zinbAIC` and `zinbBIC`.
 
-Here, we fit a few different models, specifying a different value of `K`, using the `zinbFit` function, which, unlike `zinbwave`, returns the estiamtes of all the parameters of the model, as well as the value of the likelihood function.
-
-```{r, eval=FALSE}
-k_values <- c(1: 5, 10)
-
-fit <- lapply(k_values, function(k) zinbFit(dataObj, K = k, which_assay = "counts"))
-saveRDS(fit, file = "Fit_allK.rds")
-```
+Here, we fit a few different models, specifying a different value of `K`, using the `zinbFit` function, which, unlike `zinbwave`, returns the estimates of all the parameters of the model, as well as the value of the likelihood function.
 
 ```{r}
+k_values <- c(1:5, 10)
+
+fit <- lapply(k_values, function(k) zinbFit(dataObj, K = k, which_assay = "counts"))
+```
+
+```{r bic, fig.cap="BIC of the model with different values of K."}
 k_values <- c(1: 5, 10)
-fit <- readRDS("fit_allK.rds")
 plot(k_values, sapply(fit, zinbBIC, t(counts(dataObj))), 
      ylab = "BIC", xlab = "K", type = "b")
+```
+
+```{r aic, fig.cap="AIC of the model with different values of K."}
 plot(k_values, sapply(fit, zinbAIC, t(counts(dataObj))),
      ylab = "AIC", xlab = "K", type = "b")
 ```
 
-In this case, the BIC suggests a value of `K = 3`, while the AIC suggests a value of `K >= 10`.
+In this case, the BIC suggests a value of `K = 3` (Figure \@ref(fig:bic))), while the AIC suggests a value of `K >= 10` (Figure \@ref(fig:aic))).
 
-Note, that since ZINB-WaVE is linear in the number of genes and number of cells, and quadratic on `K`, fitting multiple models and comparing their goodness-of-fit is infeasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K` between 10 and 50 are reasonable choices in real datasets.
-
-DR: There is quite a difference between AIC and BIC in this case, and it is actually hard to argue one value over another... how should we discussed these results? Also, if I keep going AIC will keep decreasing...
+Note, that since ZINB-WaVE is linear in the number of genes and number of cells, and quadratic on `K`, fitting multiple models and comparing their goodness-of-fit may not be feasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K` between 10 and 50 are reasonable choices in real datasets.
 
 ## Cell clustering: RSEC
 
@@ -446,7 +437,7 @@ The next step of the workflow is to cluster the cells according to the low-dimen
 
 Here, we are applying `RSEC` to the low-dimensional `W` matrix from ZINB-WaVE. To do so, we need to specify the `reducedDim` slot to use with the `reduceMethod` option. Here, we skip the merging step to collapse similar clusters based on the amount of differential gene expression between them. In larger dataset, this step may prevent results characterized by a large number of very small clusters (see [@Risso2018] for details).
 
-```{r rsec_50,eval=FALSE}
+```{r rsec_50}
 print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
                                 betas = 0.8, reduceMethod="zinbwave",
                                 clusterFunction = "hierarchical01",
@@ -460,21 +451,30 @@ print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
                                 consensusMinSize = 10)))
 ```
 
-```{r}
-#save(dataObj, file = 'dataObj_afterRSEC_k10.rda')
-load('dataObj_afterRSEC.rda')
-```
-
-As one can see from the code above, there are many parameters that a user can set in RSEC. Many of the values that we choose are the default values of the function, but we nonetheless specify them for clarity and reproducibility. Here, we briefly describethe role of the parameters that we set, but a more comprehensive explanation is provided in the function's man page (`?RSEC`) and in [@Risso2018].
+As one can see from the code above, there are many parameters that a user can set in RSEC. Many of the values that we choose are the default values of the function, but we nonetheless specify them for clarity and reproducibility. Here, we briefly describe the role of the parameters that we set, but a more comprehensive explanation is provided in the function's man page (`?RSEC`) and in [@Risso2018].
 
 - `k0s`: the values of `k` to start the sequential algorithm.
 - `alphas`: similarity required in the clustering of the subsampling similarity matrix (larger alphas are less stringent).
 - `betas`: similarity required to deem a cluster "stable" in sequential clustering (larger betas require greater similarity).
+- `clusterFunction`: function used for the subsample clustering: `hierarchical01` means that we use hierarchical clustering on a dissimilarity matrix based on the co-clustering proportions across subsamples.
 - `dendroReduce`: the dimensionality reduction to use for the creation of the dendrogram of the found clusters.
 - `subsampleArgs`: a list of parameters for the subsample clustering; here we specified the base clustering function as k-means, the number of resamplings and the number of starting values for the k-means algorithm.
-- `consensusProportion`: the proportion of times that two sets of samples should be together in order to be grouped into a cluster.
+- `consensusProportion`: the proportion of times that two sets of samples should be together in order to be grouped into a cluster in the consensus clustering step.
 - `mergeMethod`: our consensus clustering may find too many small clusters. If that's the case a merging step can be employed to merge clusters that do not show enough differential expression. Here, we skip this step by setting the method as "none".
 - `consensusMinSize`: minimum size required for a set of samples to be considered in a cluster; clusters smaller than this number will be removed and the corresponding samples will be set to "unclustered" (`-1`).
+
+
+The results of `RSEC` is an object of the `ClusterExperiment` class. This class extends the `SingleCellExperiment` class, by adding additional slots to store the clustering results. In addition, it has an informative `show` method that displays important information on the clustering.
+
+```{r}
+dataObj
+```
+
+Note that an object of class `ClusterExperiment` is also of class `SingleCellExperiment`. Hence, all the methods define for `SingleCellExperiment` will still work on it.
+
+```{r}
+is(dataObj, "SingleCellExperiment")
+```
 
 The correspondence between the clusters we found here and the original clusters is as follows.
 
@@ -501,7 +501,7 @@ c5 | Neuronal Precursors | purple | original 10, 14
 c6 | MV | blue | original 15
 c7 | Immature Neurons | yellow | original 9
 
-The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examinemakeConsensus)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap accross rows. The first row correspond to a consensus clustering across all candidate clusterings.
+The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examinemakeConsensus)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap across rows. The first row correspond to a consensus clustering across all candidate clusterings.
 
 ```{r examinemakeConsensus, fig.cap="RSEC: Candidate clusterings found using the function RSEC from the clusterExperiment package. The top row corresponds to the consensus clustering and is color-coded accordingly. The other rows correspond to the individual clustering across which the consensus was computed. In each row, the color is chosen to match as close as possible the color of the cluster from the previous row with the largest overlap."}
 plotClusters(dataObj, existingColors = "firstOnly")
@@ -558,7 +558,7 @@ plotHeatmap(dataObj,
             clusterLegend = metaColors, annLegend = FALSE, main = "")
 ```
 
-Finally, we can visualize the cells in a two-dimensional space using the MDS of the low-dimensional matrix `W` and coloring the cells according to their newly-found RSEC clusters (Figure \@ref(fig:mdsWce)); this is anologous to Figure \@ref(fig:mdsW) for the original published clusters.
+Finally, we can visualize the cells in a two-dimensional space using the MDS of the low-dimensional matrix `W` and coloring the cells according to their newly-found RSEC clusters (Figure \@ref(fig:mdsWce)); this is analogous to Figure \@ref(fig:mdsW) for the original published clusters.
 
 ```{r mdsWce, fig.cap="RSEC: MDS of the low-dimensional matrix W, where each point represents a cell and cells are color-coded by RSEC clustering."}
 plotReducedDims(dataObj, whichCluster="primary", reducedDim="zinbwave", pch=20,
@@ -571,51 +571,60 @@ plotReducedDims(dataObj, whichCluster="primary", reducedDim="zinbwave", pch=20,
 
 We now demonstrate how to use the Bioconductor package `slingshot` to infer branching cell lineages and order cells by developmental progression along each lineage. The method, proposed in [@Street2017], comprises two main steps: (1) The inference of the global lineage structure (i.e., the number of lineages and where they branch) using a minimum spanning tree (MST) on the clusters identified above by `RSEC` and (2) the inference of cell pseudotime variables along each lineage using a novel method of simultaneous principal curves. The approach in (1) allows the identification of any number of novel lineages, while also accommodating the use of domain-specific knowledge to supervise parts of the tree (e.g., known terminal states); the approach in (2) yields robust pseudotimes for smooth, branching lineages. 
 
-This analysis is performed by the `slingshot` function and the results are stored in a `SlingshotDataSet` object. The minimal input to this function is a low-dimensional representation of the cells and a set of cluster labels; these can be separate objects (ie. a matrix and a vector) or, as below, components of a `SingleCellExperiment` object. When a `SingleCellExperiment` object is provided as input, the ouput will be an updated `SingleCellExperiment` object containing a `SlingshotDataSet` as an element of the `int_metadata` list, which can be accessed through the `SlingshotDataSet` function. For more low-level control of the lineage inference procedure, the two steps of fitting the MST and the simultaneous principal curves may be run separately via the functions `getLineages` and `getCurves`.
+This analysis is performed by the `slingshot` function and the results are stored in a `SlingshotDataSet` object. The minimal input to this function is a low-dimensional representation of the cells and a set of cluster labels; these can be separate objects (i.e. a matrix and a vector) or, as below, components of a `SingleCellExperiment` object. When a `SingleCellExperiment` object is provided as input, the output will be an updated `SingleCellExperiment` object containing a `SlingshotDataSet` as an element of the `int_metadata` list, which can be accessed through the `SlingshotDataSet` function. For more low-level control of the lineage inference procedure, the two steps of fitting the MST and the simultaneous principal curves may be run separately via the functions `getLineages` and `getCurves`.
 
 From the original published work, we know that the start cluster should correspond to HBCs and the end clusters to MV, mOSN, and mSUS cells. Additionally, we know that GBCs should be at a junction before the differentiation between MV and mOSN cells (Figure \@ref(fig:stemcelldiff)). 
 
 To infer lineages and pseudotimes, we apply Slingshot to the 4-dimensional MDS of the low-dimensional matrix `W`. We found that the Slingshot results were robust to the number of dimensions _k_ for the MDS (we tried _k_ from 2 to 5). Here, we use the unsupervised version of Slingshot, where we only provide the identity of the start cluster but not of the end clusters.
 
+First, we remove the unclustered cells.
+
 ```{r}
-pseudoCe <- dataObj[,!primaryClusterNamed(dataObj) %in% c("-1")]
-X <- reducedDim(pseudoCe,type="zinbwave")
+dataFilt <- dataObj[,!primaryClusterNamed(dataObj) %in% c("-1")]
+```
+
+Here, we show how to use `slingshot` starting from a matrix and a set of cluster labels.
+
+```{r}
+X <- reducedDim(dataFilt,type="zinbwave")
 mds <- cmdscale(dist(X), eig = TRUE, k = 4)
-lineages <- slingshot(mds$points, clusterLabels = primaryClusterNamed(pseudoCe), start.clus = "c1")
+lineages <- slingshot(mds$points, clusterLabels = primaryClusterNamed(dataFilt), start.clus = "c1")
 ```
 
 Before discussing the simultaneous principal curves, we examine the global structure of the lineages by plotting the MST on the clusters. This shows that our implementation has recovered the lineages found in the published work (Figure \@ref(fig:tree)). The `slingshot` package also includes functionality for 3-dimensional visualization as in Figure \@ref(fig:stemcelldiff), using the `plot3d` function from the package `rgl`.
 
 ```{r tree, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space, with connecting lines between cluster centers representing the inferred global lineage structure."}
-colorCl<-convertClusterLegend(pseudoCe,whichCluster="primary",output="matrixColors")[,1]
+colorCl<-convertClusterLegend(dataFilt,whichCluster="primary",output="matrixColors")[,1]
 pairs(lineages, type="lineages", col = colorCl)
 ```
 
-Having found the global lineage structure, `slingshot` then constructed a set of smooth, branching curves in order to infer the corresponding pseudotime variables. Simultaneous principal curves are constructed from the individual cells along each lineage, rather than the cell clusters. During this iterative process, a cell may even be reassigned to a different lineage if it is significantly closer to the corresopnding curve. This makes `slingshot` less reliant on the original clustering and generally more stable. The final curves are shown in Figure \@ref(fig:curves).
+Having found the global lineage structure, `slingshot` then constructs a set of smooth, branching curves in order to infer the corresponding pseudotime variables. Simultaneous principal curves are constructed from the individual cells along each lineage, rather than the cell clusters. During this iterative process, a cell may even be reassigned to a different lineage if it is significantly closer to the corresponding curve. This makes `slingshot` less reliant on the original clustering and generally more stable. The final curves are shown in Figure \@ref(fig:curves).
 
 ```{r curves, fig.cap="Slingshot: Cells color-coded by cluster in a 4-dimensional MDS space, with smooth curves representing each inferred lineage."}
 pairs(lineages, type="curves", col = colorCl)
 ```
 
+The `show` method of the `SlingshotDataSet` class displays useful information on the inferred lineages.
+
 ```{r lineages}
 lineages
 ```
 
-As an alternative, we could have incorporated the MDS results into the `pseudoCe` object and applied `slingshot` directly to it. Here, we need to specify that we want to use the MDS results, because `slingshot` would otherwise use the first element of the `reducedDims` list (in this case, the 10-dimensional `W` matrix from `zinbwave`).
+As an alternative, we could have incorporated the MDS results into the `ClusterExperiment` object and applied `slingshot` directly to it. Here, we need to specify that we want to use the MDS results, because `slingshot` would otherwise use the first element of the `reducedDims` list (in this case, the 10-dimensional `W` matrix from `zinbwave`).
 
 ```{r sling_sce}
-reducedDim(pseudoCe, "MDS") <- mds$points
-pseudoCe <- slingshot(pseudoCe, reducedDim = "MDS", start.clus = "c1")
-pseudoCe
-colData(pseudoCe)[,grep("^sling", colnames(colData(pseudoCe)))]
+reducedDim(dataFilt, "MDS") <- mds$points
+dataFilt <- slingshot(dataFilt, reducedDim = "MDS", start.clus = "c1")
+dataFilt
+colData(dataFilt)[,grep("^sling", colnames(colData(dataFilt)))]
 ```
 
-The result of `slingshot` applied to a `ClusterExperiment` object is still of class `ClusterExperiment`. Note that we did not specify a set of cluster labels, implying that `slingshot` should use the default `primaryClusterNamed` vector.
+The result of `slingshot` applied to a `ClusterExperiment` object is still of class `ClusterExperiment`. Note that we did not specify a set of cluster labels, implying that `slingshot` should use the default `primaryCluster` vector.
 
-In the workflow, we recover the right ordering of the clusters using the unsupervised version of slingshot. However, in some other cases, we have noticed that we need to give more guidance to the algorithm to find the correct ordering. `slingshot` has the option for the user to provide known end cluster(s). Here is the code to use `slingshot` in a supervised setting, where we know that clusters `c3` and `c7` represent terminal cell fates.
+In the workflow, we recover the right ordering of the clusters using the unsupervised version of slingshot. However, in some other cases, the algorithm may need more guidance to find the correct ordering. `slingshot` has the option for the user to provide known end cluster(s). Here is the code to use `slingshot` in a supervised setting, where we know that clusters `c3` and `c7` represent terminal cell fates.
 
 ```{r slingshotsupervised, eval=FALSE}
-pseudoCeSup <- slingshot(pseudoCe, reducedDim = "MDS", start.clus = "c1",
+dataFiltSup <- slingshot(dataFilt, reducedDim = "MDS", start.clus = "c1",
                           end.clus = c("c3", "c6", "c2"))
 ```
 
@@ -630,8 +639,8 @@ Generalized Additive Models (GAMs) [@gam] are a class of models that replaces th
 We implement this approach for the neuronal lineage and display the expression measures of the top 100 genes by p-value in the heatmap of Figure \@ref(fig:heatmapsignificant). 	
 
 ```{r fitgam}
-t <- colData(pseudoCe)$slingPseudotime_1
-y <- transformData(pseudoCe)
+t <- colData(dataFilt)$slingPseudotime_1
+y <- transformData(dataFilt)
 gam.pval <- apply(y,1,function(z){
   d <- data.frame(z=z, t=t)
   tmp <- gam(z ~ lo(t), data=d)
@@ -643,30 +652,28 @@ gam.pval <- apply(y,1,function(z){
 ```{r heatmapsignificant, fig.cap="DE: Heatmap of the normalized expression measures for the 100 most significantly DE genes for the neuronal lineage, where rows correspond to genes and columns to cells ordered by pseudotime."}
 topgenes <- names(sort(gam.pval, decreasing = FALSE))[1:100]
 
-pseudoCe1 <- pseudoCe[,!is.na(t)]
-orderSamples(pseudoCe1)<-order(t[!is.na(t)])
+dataFilt1 <- dataFilt[,!is.na(t)]
+orderSamples(dataFilt1)<-order(t[!is.na(t)])
 
-plotHeatmap(pseudoCe1[topgenes,], clusterSamplesData = "orderSamplesValue", 
+plotHeatmap(dataFilt1[topgenes,], clusterSamplesData = "orderSamplesValue", 
             breaks = .99)
 ```
 
-DR: here, describe the transformData and plotHeatmap function. Above, probably right after RSEC, explain the ClusterExperiment class and its relation to SCE.
-
-# Conclusions
-
-This workflow provides a tutorial for the analysis of scRNA-seq data in R/Bioconductor. It covers four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages; and (4) DE analysis along lineages. The workflow is general and flexible, allowing the user to sustitute the statistical method used in each step by a different method. We hope our proposed workflow will ease technical aspects of scRNA-seq data analysis and help with the discovery of novel biological insights.
-
 ## Alternative approaches
 
-Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared "language" among Bioconductor's scRNA-seq software packages, makes it extremely easy to change one of the step above to use a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal chenges to the code structure above. This makes the present workflow a truly modular approach, in which a user can employ their favorite tool for each step with the guarantee that the output of the step will be readable by the next step.
+Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared "language" among Bioconductor's scRNA-seq software packages, makes it extremely easy to change one of the step above to use a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal changes to the code structure above. This makes the present workflow a truly modular approach, in which a user can employ their favorite tool for each step with the guarantee that the output of each step will be readable by the next step.
 
 An alternative normalization strategy is to compute gene and cell-specific scaling factors (e.g., `SCNorm` [@bacher2017scnorm]). Similarly, `monocle` [@trapnell2014dynamics] or `TSCAN` [@ji2016tscan] are alternatives for cell lineage inference. Finally, the software suites `Seurat` [@seurat] (available on CRAN) and `scde` [@kharchenko2014bayesian] provide alternative pipelines for cell type discovery, differential expression, and gene set analysis. A comprehensive list of tools developed for the analysis of scRNA-seq data is available at https://www.scrna-tools.org [@zappia2018exploring]. 
 
 ## Further developments
 
-Thanks to the availability of droplet-based protocols, such as Drop-Seq and 10X Genomics Chromium, it is now becoming routine to generate datasets made of tens of thousands of cells. In fact, big collaborative projects such as the Human Cell Atlas [@regev2017science] and the BRAIN Initiative Cell Census Network [@ecker2017brain] will soon generate millions, if not billions, of cells. Hence, there is a growing need for scalable methods.
+Thanks to the availability of droplet-based protocols, such as Drop-Seq and 10X Genomics Chromium, datasets made of tens of thousands of cells are now routine. In fact, big collaborative projects such as the Human Cell Atlas [@regev2017science] and the BRAIN Initiative Cell Census Network [@ecker2017brain] will soon generate millions, if not billions, of cells. Hence, there is a growing need for scalable methods.
 
 When datasets are too large to be fully stored in memory, HDF5 files [@folk2011overview] can be used to keep the data on disk and realize in memory only the subset of data needed at each step. We are in the process of updating the `clusterExperiment` and `zinbwave` packages to work with HDF5 files and we are developing more scalable methods to deal with massive datasets.
+
+# Conclusions
+
+This workflow provides a tutorial for the analysis of scRNA-seq data in R/Bioconductor. It covers four main steps: (1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) robust and stable cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and ordering of the cells by developmental progression along lineages; and (4) DE analysis along lineages. The workflow is general and flexible, allowing the user to substitute the statistical method used in each step by a different method. We hope our proposed workflow will ease technical aspects of scRNA-seq data analysis and help with the discovery of novel biological insights.
 
 # Software availability
 
@@ -686,7 +693,7 @@ sessionInfo()
 
 # Author contributions
 
-FP, DR, KS, and EP performed the data analaysis and wrote the code portions of the workflow. DR, FP, and SD wrote the text portion of the workflow, with contributions from the other three authors. DR, EP, and SD supervised the research. 
+FP, DR, KS, and EP performed the data analysis and wrote the code portions of the workflow. DR, FP, and SD wrote the text portion of the workflow, with contributions from the other three authors. DR, EP, and SD supervised the research. 
 
 # Competing interests
 
@@ -695,8 +702,6 @@ No competing interests were disclosed.
 # Grant information
 
 DR, KS, EP, and SD were supported by the National Institutes of Health BRAIN Initiative (U01 MH105979, PI: John Ngai). KS was supported by a training grant from the National Human Genome Research Institute (T32000047).
-
-DR: Update grant information!
 
 # Acknowledgments
 
