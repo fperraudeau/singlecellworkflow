@@ -109,7 +109,7 @@ set.seed(20)
 To give an idea to the users of the time needed to run the workflow, function `system.time` was used to report computation times for the time consuming functions. Computations were performed with 6 cores on a iMac with a 4 GHz Intel Core i7 processor and 32 GB of RAM. The `BiocParallel` package is used to allow for parallel computing in the `zinbwave` function. Users with a different operating system may change the package used for parallel computing and the `NCORES` variable below.
 
 ```{r parallel}
-NCORES <- 6
+NCORES <- 2
 mysystem = Sys.info()[["sysname"]]
 if (mysystem == "Darwin"){
   registerDoParallel(NCORES)
@@ -240,6 +240,24 @@ boxplot(colData(dataObj)$ERCC_reads~batch, col = col_batch,
 ```
 
 Figure \@ref(fig:spikebatch) shows how for some batches no reads were mapped to ERCC spike-ins, presumably because the spike-ins were not included. Since the utility of the spike-ins is limited in this example, we remove the spike-ins from our object.
+
+```{r}
+# added chunk of code
+library(scater)
+sce <- calculateQCMetrics(
+    dataObj,
+    feature_controls = list(
+        ERCC = isSpike(sce, "ERCC")
+    )
+)
+cData <- colData(sce)
+cData <- as.data.frame(cData)
+ggplot(cData, 
+       aes(x = total_counts, 
+           y = total_counts_ERCC,
+           col = batch)) + 
+  geom_point()
+```
 
 ```{r}
 dataObj <- dataObj[!isSpike(dataObj),]
