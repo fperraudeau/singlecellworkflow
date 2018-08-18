@@ -247,7 +247,7 @@ library(scater)
 sce <- calculateQCMetrics(
     dataObj,
     feature_controls = list(
-        ERCC = isSpike(sce, "ERCC")
+        ERCC = isSpike(dataObj, "ERCC")
     )
 )
 cData <- colData(sce)
