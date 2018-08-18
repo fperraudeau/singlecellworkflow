@@ -4,7 +4,6 @@ author:
     
   - name: Fanny Perraudeau
     affiliation: 
-      - Graduate Group in Biostatistics, University of California, Berkeley, Berkeley, CA
       - Whole Biome, Inc., San Francisco, CA
   - name: Davide Risso
     affiliation: Division of Biostatistics and Epidemiology, Department of Healthcare Policy and Research, Weill Cornell Medicine, New York, NY
