@@ -12,7 +12,7 @@ author:
   - name: Elizabeth Purdom
     affiliation: Department of Statistics, University of California, Berkeley, Berkeley, CA
   - name: Sandrine Dudoit
-    affiliation: Division of Biostatistics and Department of Statistics, University of California, Berkeley, Berkeley, CA
+    affiliation: Division of Epidemiology and Biostatistics and Department of Statistics, University of California, Berkeley, Berkeley, CA
 abstract: Novel single-cell transcriptome sequencing assays allow researchers to measure gene expression levels at the resolution of single cells and offer the unprecendented opportunity to investigate at the molecular level fundamental biological questions such as stem cell differentiation or the discovery and characterization of rare cell types. However, such assays raise challenging statistical and computational questions and require the development of novel methodology and software. Using stem cell differentiation in the mouse olfactory epithelium as a case study, this integrated workflow provides a step-by-step tutorial to the methodology and associated software for the following four main tasks:(1) dimensionality reduction accounting for zero inflation and over-dispersion and adjusting for gene and cell-level covariates; (2) cell clustering using resampling-based sequential ensemble clustering; (3) inference of cell lineages and pseudotimes; and (4) differential expression analysis along lineages. 
 keywords: single-cell, RNA-seq, normalization, dimensionality reduction, clustering, lineage inference, differential expression, workflow
 bibliography: ref.bib
@@ -67,9 +67,9 @@ The scRNA-seq dataset we use as a case study was generated to study the differen
 
 It was found that the first bifurcation produces two lineage trajectories: the first one (purple curve in Figure \@ref(fig:stemcelldiff)) generates mature sustentacular cells (mSUS) through a differentiation process characterized by the absence of cell cycle and division. The other lineage trajectory (blue and orange curves in Figure \@ref(fig:stemcelldiff)) generates proliferative GBCs, which are characterized by cell cycle and division. This, in turn, diverges into two lineages that generate mature olfactory sensory neurons (mOSN; orange curve) and microvillous cells (MV; blue curve), respectively.
 
-In this workflow, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes by cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
+In this workflow, we describe a sequence of steps to recover the lineages found in the original study, starting from the genes-by-cells matrix of raw counts publicly-available at https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE95601.
 
-Note that the preprocessing steps needed to produce such a count matrix from the raw FASTQ files are outside of the scope of this paper. These are very important steps that should be taken with care and the optimal workflow depends on the technology and the protocol used to collect the data (e.g, 3' end sequencing, droplet-based methods versus full-length mRNA, plate-based methods). 
+Note that the pre-processing steps needed to produce such a count matrix from the raw FASTQ files are outside of the scope of this paper. These are very important steps that should be taken with care and the optimal workflow depends on the technology and the protocol used to collect the data (e.g., 3'-end sequencing, droplet-based methods versus full-length mRNA, plate-based methods). 
 One way to carry out these steps within the Bioconductor framework is the `scPipe` package [@tian2017scpipe], which provides functions to quantify gene expression starting from raw sequencing files. More details can be found in the `scPipe` vignette and in [@tian2017scpipe].
 
 ## Package installation and versions
@@ -87,7 +87,7 @@ BiocManager::install(c("scone", "zinbwave", "clusterExperiment", "slingshot",
 ```
 
 Note that in order to successfully run the workflow, we need the following versions
-of the Bioconductor packages `scone (>=1.5.0)`, `zinbwave (>=1.3.2)`, and `clusterExperiment (>=2.1.3)`. We recommend running Bioconductor 3.8 (currently the devel version; see https://www.bioconductor.org/developers/how-to/useDevel/).
+of the Bioconductor packages: `scone (>=1.5.0)`, `zinbwave (>=1.3.2)`, and `clusterExperiment (>=2.1.3)`. We recommend running Bioconductor 3.8 (currently the devel version; see https://www.bioconductor.org/developers/how-to/useDevel/).
 
 We are now ready to load the packages.
 
@@ -106,7 +106,7 @@ set.seed(20)
 
 ## Parallel computing
 
-To give an idea to the users of the time needed to run the workflow, function `system.time` was used to report computation times for the time consuming functions. Computations were performed with 6 cores on a iMac with a 4 GHz Intel Core i7 processor and 32 GB of RAM. The `BiocParallel` package is used to allow for parallel computing in the `zinbwave` function. Users with a different operating system may change the package used for parallel computing and the `NCORES` variable below.
+To give users an idea of the time needed to run the workflow, the function `system.time` was used to report computation times for time-consuming functions. Computations were performed with 6 cores on a iMac with a 4 GHz Intel Core i7 processor and 32 GB of RAM. The `BiocParallel` package is used to allow for parallel computing in the `zinbwave` function. Users with a different operating system may change the package used for parallel computing and the `NCORES` variable below.
 
 ```{r parallel}
 NCORES <- 2
@@ -183,7 +183,7 @@ metadata <- data.frame("Experiment" = bio,
 metadata$publishedClusters[is.na(metadata$publishedClusters)] <- -2
 ```
 
-As discussed above, we store the data in an object of the class `SingleCellExperiment`. In addition to keeping the expression values and their associated metadata within a single object, `SingleCellExperiment` allows the user to store normalization factors and the results of dimensionality reduction methods (such as `zinbwave`) within the object. Throughout the workflow, we will highlight when this special features of `SingleCellExperiment` are used.
+As discussed above, we store the data in an object of class `SingleCellExperiment`. In addition to keeping the expression values and their associated metadata within a single object, `SingleCellExperiment` allows the user to store normalization factors and the results of dimensionality reduction methods (such as `zinbwave`) within the same object. Throughout the workflow, we will highlight when this special features of `SingleCellExperiment` are used.
 
 ```{r}
 dataObj <- SingleCellExperiment(assays = list(counts = E),
@@ -191,11 +191,11 @@ dataObj <- SingleCellExperiment(assays = list(counts = E),
 dataObj
 ```
 
-There are three special sets of genes in this dataset: the CreER gene corresponds to the estrogen receptor fused to Cre recombinase (Cre-ER), which is used to activate HBCs into differentiation following injection of tamoxifen (see [@Fletcher2017] for details); the Sox2-eGFP transgenic was used for FACS sorting; the ERCC spike-in sequences are synthetic genes spiked-in at known concentrations and used as quality controls.
+There are three special sets of genes in this dataset: the CreER gene corresponds to the estrogen receptor fused to Cre recombinase (Cre-ER), which is used to activate HBCs into differentiation following injection of tamoxifen (see [@Fletcher2017] for details); [*** SD: Do you mean the "Sox2-eGFP gene"?] the Sox2-eGFP transgenic was used for FACS sorting; the ERCC spike-in sequences are synthetic genes spiked-in at known concentrations and used for quality control purposes.
 
-We can specify spike-in genes withing the `SingleCellExperiment` class. In this way, it is easier to retrieve their expression. In addition, some specific functions may make direct use of this information (see, e.g., the `computeSpikeFactors` function in the `scran` package).
+We can specify spike-in genes within the `SingleCellExperiment` class. In this way, it is easier to retrieve their expression measures. In addition, some specific functions may make direct use of this information (see, e.g., the `computeSpikeFactors` function in the `scran` package).
 
-In this case, we specify two different sets of spike-ins, the ERCC spike-ins and the transgenic genes (eGFP and Cre-ER). This is a slight abuse of notation, as the CreER and eGFP genes are not exactly spike-ins, but it is nonetheless useful to specify that these are not endogenous genes.
+In this case, we specify two different sets of spike-ins, the ERCC spike-ins and the transgenic genes (eGFP and Cre-ER). This is a slight abuse of terminology, as the CreER and eGFP genes are not exactly spike-ins, but it is nonetheless useful to specify that these are not endogenous genes.
 
 ```{r}
 # Mark ERCC and CreER genes as spike-ins
@@ -211,7 +211,7 @@ table(isSpike(dataObj))
 table(isSpike(dataObj, "Transgene"))
 ```
 
-The total number of reads mapped to spike-ins is often a good quality-control measure. Hence, we include that into our `colData`. 
+The total number of reads mapped to spike-ins is often a good quality control measure. Hence, we include that into our `colData`. 
 
 ```{r}
 ercc <- counts(dataObj[isSpike(dataObj, "ERCC"),])
@@ -222,7 +222,7 @@ Note that here we use the function `counts()` from the `SingleCellExperiment` pa
 
 ## Exploratory data analysis
 
-Cells were processed in 18 different runs of the Fluidigm C1 system: we refer to each run as a "batch", and we refer to the technical differences between each run as "batch effects". Note that in this particular case, the batch structure is essentially defined by the limitation of the C1 system to process up to 96 cells at a time and it is hence natural to identify each C1 run as one batch. Batch effects are ubiquitous in high-throughput genomics [@leek2010tackling] and single-cell RNA-seq is not an exception [@hicks2017missing]. In other contexts, depending on experimental design, batches may correspond to different library preparations, different labs in which the data are processed, or different times at which samples are collected.
+Cells were processed in 18 different runs of the Fluidigm C1 system: we refer to each run as a "batch" and to the technical differences between each run as "batch effects". Note that, in this particular case, the batch structure is essentially defined by the limitation of the C1 system to process up to 96 cells at a time and it is hence natural to identify each C1 run as one batch. Batch effects are ubiquitous in high-throughput genomics [@leek2010tackling] and single-cell RNA-seq is not an exception [@hicks2017missing]. In other contexts, depending on experimental design, batches may correspond to different library preparations, different labs in which the data are processed, or different times at which samples are collected.
 
 ```{r batch}
 batch <- colData(dataObj)$Batch
@@ -234,7 +234,7 @@ table(batch)
 
 Often, different batches differ in terms of data quality. In particular, we observed that the number of reads mapping to spike-ins can differ dramatically across batches.
 
-```{r spikebatch, fig.cap="Distribution of reads mapped onto ERCC spike-ins per batch."}
+```{r spikebatch, fig.cap="Distribution of ERCC spike-in read counts per batch."}
 boxplot(colData(dataObj)$ERCC_reads~batch, col = col_batch,
         outline = 0, ylab="Reads mapped to ERCC", las = 3)
 ```
@@ -314,11 +314,11 @@ After sample filtering, we are left with `r ncol(dataObj)` good quality cells.
 
 ## Identification of most variable genes
 
-Often in unsupervised analyses of expression data, it is useful to focus on the most variable genes. These genes are the ones that vary the most across cells and are likely to be the most informative. Filtering out low-variance genes allows us to reduce the complexity of the problem, while retaining the most information in the dataset.
+Often in unsupervised analyses of expression data, it is useful to focus on the genes that vary the most in expression across cells and are thus likely to be the most informative. Filtering out low-variance genes allows us to reduce the complexity of the problem, while retaining the most information in the dataset.
 
-Here, for computational efficiency, we retain only the 1,000 most variable genes, using a simple `log(x+1)` transformation. This seems to be a reasonable choice for the illustrative purpose of this workflow, as we are able to recover the biological signal found in the published analysis ([@Fletcher2017]). In general, however, we recommend care in selecting a gene filtering scheme, as an appropriate choice is dataset-dependent and many different strategies have been proposed in the literature. 
+Here, for computational efficiency, we retain only the 1,000 most variable genes, following a simple `log(x+1)` transformation. This seems to be a reasonable choice for the illustrative purpose of this workflow, as we are able to recover the biological signal found in the published analysis ([@Fletcher2017]). In general, however, we recommend care in selecting a gene filtering scheme, as an appropriate choice is dataset-dependent and many different strategies have been proposed in the literature. 
 
-To compute the gene-wise variances and keep only the most variable genes, we use two functions from the `clusterExperiment` package. In particular, `makeFilterStats` will compute the variance of the gene expression data with a given transformation applied to the counts (in this case `log(x+1)`). It will then store the variance values in the `rowData` slot of the object. `filterData` will use the computed values to keep only the desired number of genes.
+To compute the gene-wise variances and keep only the most variable genes, we use two functions from the `clusterExperiment` package. In particular, `makeFilterStats` will compute the variance of the gene expression data with a given transformation applied to the counts (in this case `log(x+1)`) and store the variance values in the `rowData` slot of the object [*** SD: Which object?]. `filterData` will then use the computed values to keep only the desired number of genes.
 
 ```{r}
 dataObj <- makeFilterStats(dataObj, filterStats = "var", transFun = log1p)
@@ -326,7 +326,7 @@ dataObj <- filterData(dataObj, percentile=1000, filterStats="var")
 rowData(dataObj)
 ```
 
-One drawback of this strategy is that the logarithm is not a variance-stabilizing transformation. Variance stabilizing transformations based on the negative binomial distribution are available, e.g., in the `DESeq2` package, and may be a better choice in real data analyses. Note that the `makeFilterStats` function of `clusterExperiment` can be used with any user-supplied function. Here, we show an example with the `vst` function from `DESeq2`.
+One drawback of this strategy is that the logarithm is not a variance stabilizing transformation. Variance stabilizing transformations based on the negative binomial distribution are available, e.g., in the `DESeq2` package, and may be a better choice in real data analyses. Note that the `makeFilterStats` function of `clusterExperiment` can be used with any user-supplied function. Here, we show an example with the `vst` function from `DESeq2`.
 
 ```{r, eval=FALSE}
 ## Not run
@@ -336,7 +336,7 @@ dataObj <- makeFilterStats(dataObj, filterStats = "var", transFun = vst,
 dataObj <- filterData(dataObj, percentile=1000, filterStats="var_vst")
 ```
 
-Alternatively, the `scran` package [@Lun2016] includes the `trendVar` and `decomposeVar` functions, which estimate the mean-variance relation and the technical and biological components of the variance, to select those genes with a high biological variance. See [@Lun2016] for details.
+Alternatively, the `scran` package [@Lun2016] includes the `trendVar` and `decomposeVar` functions, which estimate the mean-variance relationship and the technical and biological components of the variance, to select those genes with a high biological variance. See [@Lun2016] for details.
 
 ## Dataset structure
 
@@ -348,7 +348,7 @@ dataObj
 
 ## Normalization and dimensionality reduction: ZINB-WaVE
 
-In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime ordering, and the identification of DE genes. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low-dimensional signal of interest [@Peer2017; @Pierson2015; @Risso2017].
+In scRNA-seq analysis, dimensionality reduction is often used as a preliminary step prior to downstream analyses, such as clustering, cell lineage and pseudotime inference, and the identification of DE genes. This allows the data to become more tractable, both from a statistical (cf. curse of dimensionality) and computational point of view. Additionally, technical noise can be reduced while preserving the often intrinsically low-dimensional signal of interest [@Peer2017; @Pierson2015; @Risso2017].
 
 Here, we perform dimensionality reduction using the zero-inflated negative binomial-based wanted variation extraction (ZINB-WaVE) method implemented in the Bioconductor package `zinbwave`. The method fits a ZINB model that accounts for zero inflation (dropouts), over-dispersion, and the count nature of the data. The model can include a cell-level intercept, which serves as a global-scaling normalization factor. The user can also specify both gene-level and cell-level covariates. The inclusion of cell-level covariates enables normalization for batch effects, while gene-level covariates may be used to adjust for sequence composition effects (e.g., gene length and GC-content effects). A schematic view of the ZINB-WaVE model is provided in Figure \@ref(fig:zinbschema). For greater detail about the ZINB-WaVE model and estimation procedure, please refer to the original manuscript [@Risso2017].
 
@@ -423,9 +423,9 @@ Overall, it seems that `zinbwave` was effective at removing batch effects withou
 
 ### Choice of K 
 
-The most important parameter to choose for the dimensionality reduction step is the number of hidden covariates to be included in the model, i.e., the number of columns of the hidden matrix `W`, which we indicate with `K`. One way to select the optimal value of `K` is to compare different values in terms of Akaike information criterion (AIC) and Bayesian information criterion (BIC). The `zinbwave` package provides two functions to compute such quantities, `zinbAIC` and `zinbBIC`.
+The most important parameter to choose for the dimensionality reduction step is the number of hidden covariates to be included in the model, i.e., the number of columns of the hidden matrix `W`, which we denote by `K`. One way to select the optimal value of `K` is to compare different values in terms of the Akaike information criterion (AIC) or the Bayesian information criterion (BIC). The `zinbwave` package provides two functions to compute such quantities, `zinbAIC` and `zinbBIC`.
 
-Here, we fit a few different models, specifying a different value of `K`, using the `zinbFit` function, which, unlike `zinbwave`, returns the estimates of all the parameters of the model, as well as the value of the likelihood function.
+Here, we fit a few different models corresponding to different values of `K` using the `zinbFit` function, which, unlike `zinbwave`, returns the estimates of all the parameters of the model as well as the value of the likelihood function.
 
 ```{r}
 k_values <- c(1:5, 10)
@@ -446,7 +446,7 @@ plot(k_values, sapply(fit, zinbAIC, t(counts(dataObj))),
 
 In this case, the BIC suggests a value of `K = 3` (Figure \@ref(fig:bic))), while the AIC suggests a value of `K >= 10` (Figure \@ref(fig:aic))).
 
-Note, that since ZINB-WaVE is linear in the number of genes and number of cells, and quadratic on `K`, fitting multiple models and comparing their goodness-of-fit may not be feasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K` between 10 and 50 are reasonable choices in real datasets.
+Note that since ZINB-WaVE is linear in the number of genes and the number of cells, but quadratic on `K`, fitting multiple models and comparing their goodness-of-fit may not be feasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K` between 10 and 50 are reasonable choices in real datasets.
 
 ## Cell clustering: RSEC
 
