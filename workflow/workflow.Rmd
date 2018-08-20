@@ -452,7 +452,7 @@ Note that since ZINB-WaVE is linear in the number of genes and the number of cel
 
 The next step of the workflow is to cluster the cells according to the low-dimensional matrix `W` computed in the previous step. We use the resampling-based sequential ensemble clustering (RSEC) framework implemented in the `RSEC` function from the Bioconductor R package `clusterExperiment`. Specifically, given a set of user-supplied base clustering algorithms and associated tuning parameters (e.g., _k_-means, with a range of values for _k_), RSEC generates a collection of candidate clusterings, with the option of resampling cells and using a sequential tight clustering procedure as in [@Tseng2005]. A consensus clustering is obtained based on the levels of co-clustering of samples across the candidate clusterings. The consensus clustering is further condensed by merging similar clusters, which is done by creating a hierarchy of clusters, working up the tree, and testing for differential expression between sister nodes, with nodes of insufficient DE collapsed. As in supervised learning, resampling greatly improves the stability of clusters and considering an ensemble of methods and tuning parameters allows us to capitalize on the different strengths of the base algorithms and avoid the subjective selection of tuning parameters. For more details on the `RSEC` method and on the `clusterExperiment` package, see [@Risso2018]. 
 
-Here, we are applying `RSEC` to the low-dimensional `W` matrix from ZINB-WaVE. To do so, we need to specify the `reducedDim` slot to use with the `reduceMethod` option. Here, we skip the merging step to collapse similar clusters based on the amount of differential gene expression between them. In larger dataset, this step may prevent results characterized by a large number of very small clusters (see [@Risso2018] for details).
+Here, we are applying `RSEC` to the low-dimensional `W` matrix from ZINB-WaVE. To do so, we need to specify the `reducedDim` slot to use with the `reduceMethod` option. Here, we skip the merging step to collapse similar clusters based on the amount of differential gene expression between them. In larger datasets, this step may prevent results characterized by a large number of very small clusters (see [@Risso2018] for details).
 
 ```{r rsec_50}
 print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
@@ -473,9 +473,9 @@ As one can see from the code above, there are many parameters that a user can se
 - `k0s`: the values of `k` to start the sequential algorithm.
 - `alphas`: similarity required in the clustering of the subsampling similarity matrix (larger alphas are less stringent).
 - `betas`: similarity required to deem a cluster "stable" in sequential clustering (larger betas require greater similarity).
-- `clusterFunction`: function used for the subsample clustering: `hierarchical01` means that we use hierarchical clustering on a dissimilarity matrix based on the co-clustering proportions across subsamples.
+- `clusterFunction`: function used for the subsample clustering; `hierarchical01` means that we use hierarchical clustering on a dissimilarity matrix based on the co-clustering proportions across subsamples.
 - `dendroReduce`: the dimensionality reduction to use for the creation of the dendrogram of the found clusters.
-- `subsampleArgs`: a list of parameters for the subsample clustering; here we specified the base clustering function as k-means, the number of resamplings and the number of starting values for the k-means algorithm.
+- `subsampleArgs`: a list of parameters for the subsample clustering; here we specified the base clustering function as k-means, the number of resamplings, and the number of starting values for the k-means algorithm.
 - `consensusProportion`: the proportion of times that two sets of samples should be together in order to be grouped into a cluster in the consensus clustering step.
 - `mergeMethod`: our consensus clustering may find too many small clusters. If that's the case a merging step can be employed to merge clusters that do not show enough differential expression. Here, we skip this step by setting the method as "none".
 - `consensusMinSize`: minimum size required for a set of samples to be considered in a cluster; clusters smaller than this number will be removed and the corresponding samples will be set to "unclustered" (`-1`).
@@ -524,7 +524,7 @@ The resulting candidate clusterings can be visualized using the `plotClusters` f
 plotClusters(dataObj, existingColors = "firstOnly")
 ```
 
-The `plotCoClustering` function produces a heatmap of the co-clustering matrix, which records, for each pair of cells, the proportion of times they were clustered together across the candidate clusters (Figure \@ref(fig:plotcoclust)). 
+The `plotCoClustering` function produces a heatmap of the co-clustering matrix, which records, for each pair of cells, the proportion of times they were clustered together across the candidate clusterings (Figure \@ref(fig:plotcoclust)). 
 
 ```{r plotcoclust, fig.cap="RSEC: Heatmap of co-clustering matrix."}
 plotCoClustering(dataObj)
@@ -588,7 +588,7 @@ plotReducedDims(dataObj, whichCluster="primary", reducedDim="zinbwave", pch=20,
 
 We now demonstrate how to use the Bioconductor package `slingshot` to infer branching cell lineages and order cells by developmental progression along each lineage. The method, proposed in [@Street2017], comprises two main steps: (1) The inference of the global lineage structure (i.e., the number of lineages and where they branch) using a minimum spanning tree (MST) on the clusters identified above by `RSEC` and (2) the inference of cell pseudotime variables along each lineage using a novel method of simultaneous principal curves. The approach in (1) allows the identification of any number of novel lineages, while also accommodating the use of domain-specific knowledge to supervise parts of the tree (e.g., known terminal states); the approach in (2) yields robust pseudotimes for smooth, branching lineages. 
 
-This analysis is performed by the `slingshot` function and the results are stored in a `SlingshotDataSet` object. The minimal input to this function is a low-dimensional representation of the cells and a set of cluster labels; these can be separate objects (i.e. a matrix and a vector) or, as below, components of a `SingleCellExperiment` object. When a `SingleCellExperiment` object is provided as input, the output will be an updated `SingleCellExperiment` object containing a `SlingshotDataSet` as an element of the `int_metadata` list, which can be accessed through the `SlingshotDataSet` function. For more low-level control of the lineage inference procedure, the two steps of fitting the MST and the simultaneous principal curves may be run separately via the functions `getLineages` and `getCurves`.
+This analysis is performed by the `slingshot` function and the results are stored in a `SlingshotDataSet` object. The minimal input to this function is a low-dimensional representation of the cells and a set of cluster labels; these can be separate objects (i.e., a matrix and a vector) or, as below, components of a `SingleCellExperiment` object. When a `SingleCellExperiment` object is provided as input, the output will be an updated `SingleCellExperiment` object containing a `SlingshotDataSet` object as an element of the `int_metadata` list, which can be accessed through the `SlingshotDataSet` function. For more low-level control of the lineage inference procedure, the two steps of fitting the MST and the simultaneous principal curves may be run separately via the functions `getLineages` and `getCurves`, respectively.
 
 From the original published work, we know that the start cluster should correspond to HBCs and the end clusters to MV, mOSN, and mSUS cells. Additionally, we know that GBCs should be at a junction before the differentiation between MV and mOSN cells (Figure \@ref(fig:stemcelldiff)). 
 
@@ -600,7 +600,7 @@ First, we remove the unclustered cells.
 dataFilt <- dataObj[,!primaryClusterNamed(dataObj) %in% c("-1")]
 ```
 
-Here, we show how to use `slingshot` starting from a matrix and a set of cluster labels.
+Here, we show how to use `slingshot` starting from a matrix of (low-dimensional) expression measures and a set of cluster labels.
 
 ```{r}
 X <- reducedDim(dataFilt,type="zinbwave")
@@ -651,7 +651,7 @@ After assigning the cells to lineages and ordering them within lineages, we are 
 
 More formally, for each lineage, we use the robust local regression method loess to model in a flexible, non-linear manner the relationship between a gene's normalized expression measures and pseudotime. We then can test the null hypothesis of no change over time for each gene using the `gam` package. 
 
-Generalized Additive Models (GAMs) [@gam] are a class of models that replaces the usual linear function of the coefficients with a sum of smooth functions. In the code below, we use a special case of the GAM in which only one covariate (pseudotime) is present. This correspond to a simple loess regression, but with the added advantage of providing a framework for the testing of the significance of the association between pseudotime and expression.
+Generalized Additive Models (GAMs) [@gam] are a class of models that replaces the usual linear function of the coefficients with a sum of smooth functions. In the code below, we use a special case of the GAM in which only one covariate (pseudotime) is present. This corresponds to a simple loess regression, but with the added advantage of providing a framework for testing the significance of the association between pseudotime and expression.
 
 We implement this approach for the neuronal lineage and display the expression measures of the top 100 genes by p-value in the heatmap of Figure \@ref(fig:heatmapsignificant). 	
 
@@ -678,13 +678,13 @@ plotHeatmap(dataFilt1[topgenes,], clusterSamplesData = "orderSamplesValue",
 
 ## Alternative approaches
 
-Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared "language" among Bioconductor's scRNA-seq software packages, makes it extremely easy to change one of the step above to use a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal changes to the code structure above. This makes the present workflow a truly modular approach, in which a user can employ their favorite tool for each step with the guarantee that the output of each step will be readable by the next step.
+Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared "language" [*** SD: Better term than "language"?] among Bioconductor's scRNA-seq software packages, makes it extremely easy to replace one of the steps above by a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global-scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal changes to the code structure above. This makes the present workflow a truly modular approach, in which a user can employ their favorite tool for each step with the guarantee that the output of each step will be readable by the next step.
 
 An alternative normalization strategy is to compute gene and cell-specific scaling factors (e.g., `SCNorm` [@bacher2017scnorm]). Similarly, `monocle` [@trapnell2014dynamics] or `TSCAN` [@ji2016tscan] are alternatives for cell lineage inference. Finally, the software suites `Seurat` [@seurat] (available on CRAN) and `scde` [@kharchenko2014bayesian] provide alternative pipelines for cell type discovery, differential expression, and gene set analysis. A comprehensive list of tools developed for the analysis of scRNA-seq data is available at https://www.scrna-tools.org [@zappia2018exploring]. 
 
 ## Further developments
 
-Thanks to the availability of droplet-based protocols, such as Drop-Seq and 10X Genomics Chromium, datasets made of tens of thousands of cells are now routine. In fact, big collaborative projects such as the Human Cell Atlas [@regev2017science] and the BRAIN Initiative Cell Census Network [@ecker2017brain] will soon generate millions, if not billions, of cells. Hence, there is a growing need for scalable methods.
+Thanks to the availability of droplet-based protocols, such as Drop-Seq and 10X Genomics Chromium, datasets made of tens of thousands of cells are now routine. Indeed, big collaborative projects such as the Human Cell Atlas [@regev2017science] and the BRAIN Initiative Cell Census Network [@ecker2017brain] will soon generate millions, if not billions, of cells. Hence, there is a growing need for scalable methods.
 
 When datasets are too large to be fully stored in memory, HDF5 files [@folk2011overview] can be used to keep the data on disk and realize in memory only the subset of data needed at each step. We are in the process of updating the `clusterExperiment` and `zinbwave` packages to work with HDF5 files and we are developing more scalable methods to deal with massive datasets.
 
@@ -722,6 +722,6 @@ DR, KS, EP, and SD were supported by the National Institutes of Health BRAIN Ini
 
 # Acknowledgments
 
-The authors are grateful to Professor John Ngai (Department of Molecular and Cell Biology, UC Berkeley) and his group members Dr. Russell B. Fletcher and Diya Das for motivating the research presented in this workflow and for valuable feedback on applications to biological data. We would also like to thank Michael B. Cole for his contributions to `scone`.
+The authors are grateful to Professor John Ngai (Department of Molecular and Cell Biology, UC Berkeley) and his group members Dr. Russell B. Fletcher and Dr.Diya Das for motivating the research presented in this workflow and for valuable feedback on applications to biological data. We would also like to thank Michael B. Cole for his contributions to `scone`.
 
 # References
