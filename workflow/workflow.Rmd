@@ -326,7 +326,7 @@ dataObj <- filterData(dataObj, percentile=1000, filterStats="var")
 rowData(dataObj)
 ```
 
-One drawback of this strategy is that the logarithm is not a variance stabilizing transformation. Variance stabilizing transformations based on the negative binomial distribution are available, e.g., in the `DESeq2` package, and may be a better choice in real data analyses. Note that the `makeFilterStats` function of `clusterExperiment` can be used with any user-supplied function. Here, we show an example with the `vst` function from `DESeq2`.
+One drawback of this strategy is that the logarithm is not a variance-stabilizing transformation. Variance-stabilizing transformations based on the negative binomial distribution are available, e.g., in the `DESeq2` package, and may be a better choice in real data analyses. Note that the `makeFilterStats` function of `clusterExperiment` can be used with any user-supplied function. Here, we show an example with the `vst` function from `DESeq2`.
 
 ```{r, eval=FALSE}
 ## Not run
@@ -433,13 +433,13 @@ k_values <- c(1:5, 10)
 fit <- lapply(k_values, function(k) zinbFit(dataObj, K = k, which_assay = "counts"))
 ```
 
-```{r bic, fig.cap="BIC of the model with different values of K."}
+```{r bic, fig.cap="ZINB-WaVE: BIC of model for different values of K."}
 k_values <- c(1: 5, 10)
 plot(k_values, sapply(fit, zinbBIC, t(counts(dataObj))), 
      ylab = "BIC", xlab = "K", type = "b")
 ```
 
-```{r aic, fig.cap="AIC of the model with different values of K."}
+```{r aic, fig.cap="ZINB-WaVE: AIC of model for different values of K."}
 plot(k_values, sapply(fit, zinbAIC, t(counts(dataObj))),
      ylab = "AIC", xlab = "K", type = "b")
 ```
@@ -520,7 +520,7 @@ c7 | Immature Neurons | yellow | original 9
 
 The resulting candidate clusterings can be visualized using the `plotClusters` function (Figure \@ref(fig:examinemakeConsensus)), where columns correspond to cells and rows to different clusterings. Each sample is color-coded based on its clustering for that row, where the colors have been chosen to try to match up clusters that show large overlap across rows. The first row correspond to a consensus clustering across all candidate clusterings.
 
-```{r examinemakeConsensus, fig.cap="RSEC: Candidate clusterings found using the function RSEC from the clusterExperiment package. The top row corresponds to the consensus clustering and is color-coded accordingly. The other rows correspond to the individual clustering across which the consensus was computed. In each row, the color is chosen to match as close as possible the color of the cluster from the previous row with the largest overlap."}
+```{r examinemakeConsensus, fig.cap="RSEC: Candidate clusterings found using the function RSEC from the clusterExperiment package. The top row corresponds to the consensus clustering and is color-coded accordingly. The other rows correspond to the individual clusterings across which the consensus was computed. In each row, the colors are chosen to match as closely as possible with the colors of clusters with the largest overlap from the previous row."}
 plotClusters(dataObj, existingColors = "firstOnly")
 ```
 
