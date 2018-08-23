@@ -109,7 +109,7 @@ set.seed(20)
 To give users an idea of the time needed to run the workflow, the function `system.time` was used to report computation times for time-consuming functions. Computations were performed with 6 cores on a iMac with a 4 GHz Intel Core i7 processor and 32 GB of RAM. The `BiocParallel` package is used to allow for parallel computing in the `zinbwave` function. Users with a different operating system may change the package used for parallel computing and the `NCORES` variable below.
 
 ```{r parallel}
-NCORES <- 2
+NCORES <- 6
 mysystem = Sys.info()[["sysname"]]
 if (mysystem == "Darwin"){
   registerDoParallel(NCORES)
@@ -191,7 +191,7 @@ dataObj <- SingleCellExperiment(assays = list(counts = E),
 dataObj
 ```
 
-There are three special sets of genes in this dataset: the CreER gene corresponds to the estrogen receptor fused to Cre recombinase (Cre-ER), which is used to activate HBCs into differentiation following injection of tamoxifen (see [@Fletcher2017] for details); [*** SD: Do you mean the "Sox2-eGFP gene"?] the Sox2-eGFP transgenic was used for FACS sorting; the ERCC spike-in sequences are synthetic genes spiked-in at known concentrations and used for quality control purposes.
+There are three special sets of genes in this dataset: the CreER gene corresponds to the estrogen receptor fused to Cre recombinase (Cre-ER), which is used to activate HBCs into differentiation following injection of tamoxifen (see [@Fletcher2017] for details); the Sox2-eGFP transgene was used for FACS sorting; the ERCC spike-in sequences are synthetic genes spiked-in at known concentrations and used for quality control purposes.
 
 We can specify spike-in genes within the `SingleCellExperiment` class. In this way, it is easier to retrieve their expression measures. In addition, some specific functions may make direct use of this information (see, e.g., the `computeSpikeFactors` function in the `scran` package).
 
@@ -318,7 +318,7 @@ Often in unsupervised analyses of expression data, it is useful to focus on the 
 
 Here, for computational efficiency, we retain only the 1,000 most variable genes, following a simple `log(x+1)` transformation. This seems to be a reasonable choice for the illustrative purpose of this workflow, as we are able to recover the biological signal found in the published analysis ([@Fletcher2017]). In general, however, we recommend care in selecting a gene filtering scheme, as an appropriate choice is dataset-dependent and many different strategies have been proposed in the literature. 
 
-To compute the gene-wise variances and keep only the most variable genes, we use two functions from the `clusterExperiment` package. In particular, `makeFilterStats` will compute the variance of the gene expression data with a given transformation applied to the counts (in this case `log(x+1)`) and store the variance values in the `rowData` slot of the object [*** SD: Which object?]. `filterData` will then use the computed values to keep only the desired number of genes.
+To compute the gene-wise variances and keep only the most variable genes, we use two functions from the `clusterExperiment` package. In particular, `makeFilterStats` will compute the variance of the gene expression data with a given transformation applied to the counts (in this case `log(x+1)`) and store the variance values in the `rowData` slot of the resulting `SingleCellExperiment` object. `filterData` will then use the computed values to keep only the desired number of genes.
 
 ```{r}
 dataObj <- makeFilterStats(dataObj, filterStats = "var", transFun = log1p)
