@@ -242,24 +242,6 @@ boxplot(colData(dataObj)$ERCC_reads~batch, col = col_batch,
 Figure \@ref(fig:spikebatch) shows how for some batches no reads were mapped to ERCC spike-ins, presumably because the spike-ins were not included. Since the utility of the spike-ins is limited in this example, we remove the spike-ins from our object.
 
 ```{r}
-# added chunk of code
-library(scater)
-sce <- calculateQCMetrics(
-    dataObj,
-    feature_controls = list(
-        ERCC = isSpike(dataObj, "ERCC")
-    )
-)
-cData <- colData(sce)
-cData <- as.data.frame(cData)
-ggplot(cData, 
-       aes(x = total_counts, 
-           y = total_counts_ERCC,
-           col = batch)) + 
-  geom_point()
-```
-
-```{r}
 dataObj <- dataObj[!isSpike(dataObj),]
 dataObj <- clearSpikes(dataObj)
 ```
@@ -360,15 +342,19 @@ The model can be thought of as a generalization of a factor analysis model, in w
 
 As with most dimensionality reduction methods, the user needs to specify the number of factors (`K`, the number of columns of `W`), which correspond to the dimensions for the new low-dimensional space. Here, we use `K = 50` dimensions and adjust for batch effects via the matrix `X`. Note that if the user includes more genes in the analysis, it may be preferable to reduce `K` to achieve a similar computational time.
 
-```{r zinb}
+```{r zinb, eval=FALSE}
 print(system.time(dataObj <- zinbwave(dataObj, K = 50, X = "~ Batch",
                                       residuals = TRUE,
                                       normalizedValues = TRUE)))
 ```
 
+```{r}
+load("dataObj_afterZinbwave.rda")
+```
+
 ### Normalization
 
-The function `zinbwave` returns a `SingleCellExperiment` object that includes the normalized expression measures (`notmalizedValues`), defined as deviance residuals from the fit of the ZINB-WaVE model with user-specified gene- and cell-level covariates. Such residuals can be used for visualization purposes (e.g., in heatmaps, boxplots). Note that the low-dimensional matrix `W` is not included in the computation of the residuals to avoid the removal of the biological signal of interest.
+The function `zinbwave` returns a `SingleCellExperiment` object that includes the normalized expression measures (`normalizedValues`), defined as deviance residuals from the fit of the ZINB-WaVE model with user-specified gene- and cell-level covariates. Such residuals can be used for visualization purposes (e.g., in heatmaps, boxplots). Note that the low-dimensional matrix `W` is not included in the computation of the residuals to avoid the removal of the biological signal of interest.
 
 ```{r norm}
 norm <- assays(dataObj)$normalizedValues
@@ -392,7 +378,7 @@ In addition to the normalized values, the `zinbwave` function added several new 
 assayNames(dataObj)
 ```
 
-We set the normalized values as our first assay, so that they become the default in the plots below.
+We set the normalized values as our first assay, so that they become the default in the plots below. Note that one can specify which assay to plot with the `whichAssay` parameter in the `clusterExperiment` visualization functions.
 
 ```{r setNormAssay}
 assays(dataObj) <- assays(dataObj)[c("normalizedValues", "counts", "weights",
@@ -423,18 +409,21 @@ Overall, it seems that `zinbwave` was effective at removing batch effects withou
 
 ### Choice of K 
 
-The most important parameter to choose for the dimensionality reduction step is the number of hidden covariates to be included in the model, i.e., the number of columns of the hidden matrix `W`, which we denote by `K`. One way to select the optimal value of `K` is to compare different values in terms of the Akaike information criterion (AIC) or the Bayesian information criterion (BIC). The `zinbwave` package provides two functions to compute such quantities, `zinbAIC` and `zinbBIC`.
+The most important parameter to choose for the dimensionality reduction step is the number of hidden covariates to be included in the model, i.e., the number of columns of the hidden matrix `W`, which we denote by `K`. As with any dimensionality reduction technique, choosing the number of factors `K` is far from trivial. There is no "one-fits-all" solution and the researcher may want to try a few different values of `K` and compare the results.
+
+The `zinbwave` package provides two functions that may be used to guide the choice of `K`. The functions `zinbAIC` and `zinbBIC` compute the Akaike information criterion (AIC) and the Bayesian information criterion (BIC), respectively, that can be used to compare models with different values of `K` (smaller values of AIC and BIC indicate a better fit).
 
 Here, we fit a few different models corresponding to different values of `K` using the `zinbFit` function, which, unlike `zinbwave`, returns the estimates of all the parameters of the model as well as the value of the likelihood function.
 
-```{r}
+```{r, eval=FALSE}
 k_values <- c(1:5, 10)
 
 fit <- lapply(k_values, function(k) zinbFit(dataObj, K = k, which_assay = "counts"))
 ```
 
 ```{r bic, fig.cap="ZINB-WaVE: BIC of model for different values of K."}
-k_values <- c(1: 5, 10)
+k_values <- c(1:5, 10)
+fit <- readRDS("Fit_allK.rds")
 plot(k_values, sapply(fit, zinbBIC, t(counts(dataObj))), 
      ylab = "BIC", xlab = "K", type = "b")
 ```
@@ -444,9 +433,11 @@ plot(k_values, sapply(fit, zinbAIC, t(counts(dataObj))),
      ylab = "AIC", xlab = "K", type = "b")
 ```
 
-In this case, the BIC suggests a value of `K = 3` (Figure \@ref(fig:bic))), while the AIC suggests a value of `K >= 10` (Figure \@ref(fig:aic))).
+In this case, the BIC suggests a value of `K = 3` (Figure \@ref(fig:bic)), while the AIC suggests a value of `K >= 10` (Figure \@ref(fig:aic)).
 
-Note that since ZINB-WaVE is linear in the number of genes and the number of cells, but quadratic on `K`, fitting multiple models and comparing their goodness-of-fit may not be feasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K` between 10 and 50 are reasonable choices in real datasets.
+Depending on the application and on the interpretation of the latent space, we may want to include only a few or several factors. Here, we hope that our reduced space will contain all the biological signal of interest, and selecting a large number of factors seems preferable. The ZINB-WaVE model can also be used to infer unknown normalization factors (similar to RUV [@risso2014normalization]); in such case, a smaller value of `K` would be more appropriate.
+
+Finally, note that since ZINB-WaVE is linear in the number of genes and the number of cells, but quadratic in `K`, fitting multiple models and comparing their goodness-of-fit may not be feasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K` between 10 and 50 are reasonable choices in real datasets, when the goal is dimensionality reduction.
 
 ## Cell clustering: RSEC
 
@@ -454,7 +445,7 @@ The next step of the workflow is to cluster the cells according to the low-dimen
 
 Here, we are applying `RSEC` to the low-dimensional `W` matrix from ZINB-WaVE. To do so, we need to specify the `reducedDim` slot to use with the `reduceMethod` option. Here, we skip the merging step to collapse similar clusters based on the amount of differential gene expression between them. In larger datasets, this step may prevent results characterized by a large number of very small clusters (see [@Risso2018] for details).
 
-```{r rsec_50}
+```{r rsec_50, eval=FALSE}
 print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
                                 betas = 0.8, reduceMethod="zinbwave",
                                 clusterFunction = "hierarchical01",
@@ -466,6 +457,10 @@ print(system.time(dataObj <- RSEC(dataObj, k0s = 4:15, alphas = c(0.1),
                                 consensusProportion = 0.7,
                                 mergeMethod = "none", random.seed=424242,
                                 consensusMinSize = 10)))
+```
+
+```{r}
+load("dataObj_afterRSEC.rda")
 ```
 
 As one can see from the code above, there are many parameters that a user can set in RSEC. Many of the values that we choose are the default values of the function, but we nonetheless specify them for clarity and reproducibility. Here, we briefly describe the role of the parameters that we set, but a more comprehensive explanation is provided in the function's man page (`?RSEC`) and in [@Risso2018].
@@ -567,7 +562,7 @@ batchColors <- bigPalette[1:nlevels(colData(dataObj)$Batch)]
 metaColors <- list("Experiment" = experimentColors,
                    "Batch" = batchColors)
 
-plotHeatmap(dataObj, 
+plotHeatmap(dataObj,
             whichClusters = c("makeConsensus","publishedClusters"), 
             clusterFeaturesData = "all",
             clusterSamplesData = "dendrogramValue", breaks = 0.99,
@@ -678,7 +673,7 @@ plotHeatmap(dataFilt1[topgenes,], clusterSamplesData = "orderSamplesValue",
 
 ## Alternative approaches
 
-Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared "language" [*** SD: Better term than "language"?] among Bioconductor's scRNA-seq software packages, makes it extremely easy to replace one of the steps above by a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global-scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal changes to the code structure above. This makes the present workflow a truly modular approach, in which a user can employ their favorite tool for each step with the guarantee that the output of each step will be readable by the next step.
+Many different methods have been proposed for the analysis of scRNA-seq data and this paper presents only one possible workflow, using tools that we have developed in recent years. The use of the `SingleCellExperiment` class, which is the shared data container among Bioconductor's scRNA-seq software packages, makes it extremely easy to replace one of the steps above by a different approach. For instance, one could use `scPipe` [@tian2017scpipe] for gene expression quantification, `scater` [@McCarthy2017] for quality control and filtering, `scran` [@lun2016pooling] to robustly calculate global-scaling factors for normalization, and `SC3` [@kiselev2017sc3] for clustering, with minimal changes to the code structure above. This makes the present workflow a truly modular approach, in which a user can employ their favorite tool for each step with the guarantee that the output of each step will be readable by the next step.
 
 An alternative normalization strategy is to compute gene and cell-specific scaling factors (e.g., `SCNorm` [@bacher2017scnorm]). Similarly, `monocle` [@trapnell2014dynamics] or `TSCAN` [@ji2016tscan] are alternatives for cell lineage inference. Finally, the software suites `Seurat` [@seurat] (available on CRAN) and `scde` [@kharchenko2014bayesian] provide alternative pipelines for cell type discovery, differential expression, and gene set analysis. A comprehensive list of tools developed for the analysis of scRNA-seq data is available at https://www.scrna-tools.org [@zappia2018exploring]. 
 
