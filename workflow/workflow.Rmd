@@ -409,9 +409,9 @@ Overall, it seems that `zinbwave` was effective at removing batch effects withou
 
 ### Choice of K 
 
-The most important parameter to choose for the dimensionality reduction step is the number of hidden covariates to be included in the model, i.e., the number of columns of the hidden matrix `W`, which we denote by `K`. As with any dimensionality reduction technique, choosing the number of factors `K` is far from trivial. There is no "one-fits-all" solution and the researcher may want to try a few different values of `K` and compare the results.
+The most important parameter to choose for the dimensionality reduction step is the number of hidden covariates to be included in the model, i.e., the number of columns of the hidden matrix `W`, which we denote by `K`. As with any dimensionality reduction technique, choosing the number of factors `K` is far from trivial. There is no "one-size-fits-all" solution and the researcher may want to try a few different values of `K` and compare the results.
 
-The `zinbwave` package provides two functions that may be used to guide the choice of `K`. The functions `zinbAIC` and `zinbBIC` compute the Akaike information criterion (AIC) and the Bayesian information criterion (BIC), respectively, that can be used to compare models with different values of `K` (smaller values of AIC and BIC indicate a better fit).
+The `zinbwave` package provides two functions that may be used to guide the choice of `K`. The functions `zinbAIC` and `zinbBIC`, which compute the Akaike information criterion (AIC) and the Bayesian information criterion (BIC), respectively, can be used to compare models with different values of `K` (smaller values of AIC and BIC indicate a better fit).
 
 Here, we fit a few different models corresponding to different values of `K` using the `zinbFit` function, which, unlike `zinbwave`, returns the estimates of all the parameters of the model as well as the value of the likelihood function.
 
@@ -435,7 +435,7 @@ plot(k_values, sapply(fit, zinbAIC, t(counts(dataObj))),
 
 In this case, the BIC suggests a value of `K = 3` (Figure \@ref(fig:bic)), while the AIC suggests a value of `K >= 10` (Figure \@ref(fig:aic)).
 
-Depending on the application and on the interpretation of the latent space, we may want to include only a few or several factors. Here, we hope that our reduced space will contain all the biological signal of interest, and selecting a large number of factors seems preferable. The ZINB-WaVE model can also be used to infer unknown normalization factors (similar to RUV [@risso2014normalization]); in such case, a smaller value of `K` would be more appropriate.
+Depending on the application and on the interpretation of the latent space, we may want to include different numbers of hidden factors. Here, the goal is for the reduced space to capture the biological signal of interest; selecting a large number of factors therefore seems preferable. The ZINB-WaVE model can also be used to infer unknown normalization factors (similar to RUV [@risso2014normalization]); in such a case, a smaller value of `K` would be more appropriate.
 
 Finally, note that since ZINB-WaVE is linear in the number of genes and the number of cells, but quadratic in `K`, fitting multiple models and comparing their goodness-of-fit may not be feasible for large datasets. In such cases, choosing a single value of `K` may be needed. In practice, we found that `K` between 10 and 50 are reasonable choices in real datasets, when the goal is dimensionality reduction.
 
